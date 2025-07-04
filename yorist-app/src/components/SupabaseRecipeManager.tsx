@@ -94,7 +94,7 @@ export default function SupabaseRecipeManager({
         // 토글 성공 시 목록 업데이트
         setRecipes(prev => prev.map(recipe => 
           recipe.id === recipeId 
-            ? { ...recipe, isFavorite: !currentFavorite }
+            ? { ...recipe, isfavorite: !currentFavorite }
             : recipe
         ));
         setError('');
@@ -123,8 +123,8 @@ export default function SupabaseRecipeManager({
         channel: recipe.channel,
         tags: recipe.tags,
         isVegetarian: recipe.isVegetarian,
-        createdAt: new Date(recipe.createdAt!),
-        isFavorite: recipe.isFavorite ?? false
+        createdat: new Date(recipe.createdat!),
+        isfavorite: recipe.isfavorite ?? false
       }));
       setRecipes(convertedResults);
       setError('');
@@ -178,10 +178,10 @@ export default function SupabaseRecipeManager({
               <h3 className="text-white font-semibold text-lg">{recipe.title}</h3>
               <div className="flex space-x-2">
                 <button
-                  onClick={() => handleToggleFavorite(recipe.id, recipe.isFavorite)}
-                  className={`p-2 rounded ${recipe.isFavorite ? 'text-yellow-400' : 'text-gray-400'}`}
+                  onClick={() => handleToggleFavorite(recipe.id, recipe.isfavorite)}
+                  className={`p-2 rounded ${recipe.isfavorite ? 'text-yellow-400' : 'text-gray-400'}`}
                 >
-                  {recipe.isFavorite ? '★' : '☆'}
+                  {recipe.isfavorite ? '★' : '☆'}
                 </button>
                 <button
                   onClick={() => handleDeleteRecipe(recipe.id)}
@@ -203,7 +203,7 @@ export default function SupabaseRecipeManager({
             </div>
             
             <div className="text-gray-400 text-xs">
-              생성일: {new Date(recipe.createdAt).toLocaleDateString('ko-KR')}
+              생성일: {new Date(recipe.createdat).toLocaleDateString('ko-KR')}
               {recipe.isVegetarian && <span className="ml-2 text-green-400">채식</span>}
             </div>
           </div>

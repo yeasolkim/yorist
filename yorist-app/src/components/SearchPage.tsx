@@ -8,7 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 
 interface SearchPageProps {
   onRecipeClick?: (recipe: Recipe) => void;
-  onFavoriteToggle?: (recipeId: string) => void;
+  onFavoriteToggle?: (recipeId: string, currentFavorite: boolean) => void;
   favorites?: Set<string>;
 }
 
@@ -201,7 +201,7 @@ export default function SearchPage({
                   recipe={recipe}
                   onClick={() => onRecipeClick?.(recipe)}
                   showFavorite={true}
-                  onFavoriteToggle={onFavoriteToggle}
+                  onFavoriteToggle={(id) => onFavoriteToggle?.(id, favorites?.has(id) || false)}
                   favorites={favorites}
                 />
               ))}

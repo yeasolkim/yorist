@@ -113,8 +113,8 @@ export default function AddRecipePage() {
   };
 
   // 요리 단계 삭제 핸들러
-  const handleRemoveStep = (id: number) => {
-    setSteps(steps.filter(step => step.id !== id));
+  const handleRemoveStep = (index: number) => {
+    setSteps(steps.filter((_, i) => i !== index));
   };
 
   // 폼 제출 핸들러
