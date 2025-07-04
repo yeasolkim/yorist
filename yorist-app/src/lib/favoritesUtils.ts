@@ -9,7 +9,7 @@ import { Recipe } from './types';
 export const applyFavoritesToRecipes = (recipes: Recipe[], favorites: Set<string>): Recipe[] => {
   return recipes.map(recipe => ({
     ...recipe,
-    isFavorite: favorites.has(recipe.id)
+    isfavorite: favorites.has(recipe.id)
   }));
 };
 

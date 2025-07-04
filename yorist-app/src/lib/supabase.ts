@@ -8,40 +8,62 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // 기존 types.ts에서 타입 import
-import { Recipe, Ingredient, RecipeStep } from './types'
+import { Recipe, RecipeIngredient, RecipeStep } from './types'
 
-// Supabase용 레시피 타입 (기존 타입과 호환)
+// Supabase용 레시피 타입 (RecipeIngredient 구조 지원)
 export interface SupabaseRecipe {
   id?: string
   title: string
   description: string
-  ingredients: Ingredient[]
+  ingredients: RecipeIngredient[]
   steps: RecipeStep[]
-  videoUrl?: string
-  channel?: string
-  tags?: string[]
+  videourl?: string // DB 컬럼명과 일치
   isVegetarian?: boolean
-  createdAt?: string
-  isFavorite?: boolean
+  createdat?: string
+  isfavorite?: boolean
   updated_at?: string
+  thumbnail_url?: string
 }
+
+// 타입 변환 함수들
+export const convertToSupabaseRecipe = (recipe: Recipe): Omit<SupabaseRecipe, 'id' | 'createdat' | 'updated_at'> => ({
+  title: recipe.title,
+  description: recipe.description,
+  ingredients: recipe.ingredients,
+  steps: recipe.steps,
+  videourl: recipe.videoUrl, // DB 컬럼명과 일치
+  isVegetarian: recipe.isVegetarian,
+  isfavorite: recipe.isfavorite,
+});
+
+export const convertFromSupabaseRecipe = (recipe: SupabaseRecipe): Recipe => ({
+  id: recipe.id!,
+  title: recipe.title,
+  description: recipe.description,
+  ingredients: recipe.ingredients,
+  steps: recipe.steps,
+  videoUrl: recipe.videourl, // DB 컬럼명과 일치
+  isVegetarian: recipe.isVegetarian,
+  createdat: new Date(recipe.createdat!),
+  isfavorite: recipe.isfavorite ?? false
+});
 
 // 레시피 관련 데이터베이스 함수들
 export const recipeService = {
   // 모든 레시피 조회
-  async getAllRecipes(): Promise<SupabaseRecipe[]> {
+  async getAllRecipes(): Promise<Recipe[]> {
     try {
       const { data, error } = await supabase
         .from('recipes')
         .select('*')
-        .order('createdAt', { ascending: false })
+        .order('createdat', { ascending: false })
 
       if (error) {
         console.error('레시피 조회 실패:', error)
         throw error
       }
 
-      return data || []
+      return (data || []).map(convertFromSupabaseRecipe)
     } catch (error) {
       console.error('레시피 조회 중 오류 발생:', error)
       return []
@@ -49,7 +71,7 @@ export const recipeService = {
   },
 
   // 단일 레시피 조회
-  async getRecipeById(id: string): Promise<SupabaseRecipe | null> {
+  async getRecipeById(id: string): Promise<Recipe | null> {
     try {
       const { data, error } = await supabase
         .from('recipes')
@@ -62,7 +84,7 @@ export const recipeService = {
         return null
       }
 
-      return data
+      return data ? convertFromSupabaseRecipe(data) : null
     } catch (error) {
       console.error('레시피 조회 중 오류 발생:', error)
       return null
@@ -70,14 +92,14 @@ export const recipeService = {
   },
 
   // 새 레시피 추가
-  async createRecipe(recipe: Omit<SupabaseRecipe, 'id' | 'createdAt' | 'updated_at'>): Promise<SupabaseRecipe | null> {
+  async createRecipe(recipe: Omit<SupabaseRecipe, 'id' | 'createdat' | 'updated_at'>): Promise<SupabaseRecipe | null> {
     try {
       const { data, error } = await supabase
         .from('recipes')
         .insert([{
           ...recipe,
-          createdAt: new Date().toISOString(),
-          isFavorite: false
+          createdat: new Date().toISOString(),
+          isfavorite: false
         }])
         .select()
         .single()
@@ -137,20 +159,20 @@ export const recipeService = {
   },
 
   // 제목으로 레시피 검색
-  async searchRecipes(searchTerm: string): Promise<SupabaseRecipe[]> {
+  async searchRecipes(searchTerm: string): Promise<Recipe[]> {
     try {
       const { data, error } = await supabase
         .from('recipes')
         .select('*')
         .ilike('title', `%${searchTerm}%`)
-        .order('createdAt', { ascending: false })
+        .order('createdat', { ascending: false })
 
       if (error) {
         console.error('레시피 검색 실패:', error)
         throw error
       }
 
-      return data || []
+      return (data || []).map(convertFromSupabaseRecipe)
     } catch (error) {
       console.error('레시피 검색 중 오류 발생:', error)
       return []
@@ -162,7 +184,7 @@ export const recipeService = {
     try {
       const { error } = await supabase
         .from('recipes')
-        .update({ isFavorite })
+        .update({ isfavorite: isFavorite })
         .eq('id', id)
 
       if (error) {

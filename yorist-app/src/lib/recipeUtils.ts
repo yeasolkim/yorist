@@ -1,32 +1,61 @@
-import { Recipe } from './types';
-import { recipeService, SupabaseRecipe } from './supabase';
+import { Recipe, RecipeIngredient } from './types';
+import { recipeService, SupabaseRecipe, convertToSupabaseRecipe, convertFromSupabaseRecipe } from './supabase';
+import { createClient } from '@supabase/supabase-js';
 
-// Supabase와 localStorage 간 타입 변환 함수
-const convertToSupabaseRecipe = (recipe: Recipe): Omit<SupabaseRecipe, 'id' | 'createdAt' | 'updated_at'> => ({
-  title: recipe.title,
-  description: recipe.description,
-  ingredients: recipe.ingredients,
-  steps: recipe.steps,
-  videoUrl: recipe.videoUrl,
-  channel: recipe.channel,
-  tags: recipe.tags,
-  isVegetarian: recipe.isVegetarian,
-  isFavorite: recipe.isFavorite
-});
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
-const convertFromSupabaseRecipe = (recipe: SupabaseRecipe): Recipe => ({
-  id: recipe.id!,
-  title: recipe.title,
-  description: recipe.description,
-  ingredients: recipe.ingredients,
-  steps: recipe.steps,
-  videoUrl: recipe.videoUrl,
-  channel: recipe.channel,
-  tags: recipe.tags,
-  isVegetarian: recipe.isVegetarian,
-  createdAt: new Date(recipe.createdAt!),
-  isFavorite: recipe.isFavorite ?? false
-});
+// ingredients_master 테이블과 연동하여 재료 처리
+const processIngredients = async (ingredients: RecipeIngredient[]): Promise<RecipeIngredient[]> => {
+  const processedIngredients: RecipeIngredient[] = [];
+  
+  for (const ingredient of ingredients) {
+    try {
+      // 기존 재료가 있는지 확인
+      const { data: existingIngredient } = await supabase
+        .from('ingredients_master')
+        .select('id')
+        .eq('name', ingredient.name)
+        .single();
+
+      let ingredientId = ingredient.ingredient_id;
+
+      if (existingIngredient) {
+        // 기존 재료가 있으면 해당 ID 사용
+        ingredientId = existingIngredient.id;
+      } else {
+        // 새 재료 추가
+        const { data: newIngredient, error } = await supabase
+          .from('ingredients_master')
+          .insert({
+            name: ingredient.name,
+            unit: ingredient.unit || '개',
+            shop_url: ingredient.shopUrl || null,
+            is_favorite: false
+          })
+          .select('id')
+          .single();
+
+        if (error) {
+          console.error('재료 추가 실패:', error);
+          // 에러가 발생해도 계속 진행 (기존 ingredient_id 사용)
+        } else {
+          ingredientId = newIngredient.id;
+        }
+      }
+
+      processedIngredients.push({
+        ...ingredient,
+        ingredient_id: ingredientId
+      });
+    } catch (error) {
+      console.error('재료 처리 중 오류:', error);
+      // 에러가 발생해도 기존 데이터 유지
+      processedIngredients.push(ingredient);
+    }
+  }
+  
+  return processedIngredients;
+};
 
 // localStorage 폴백용 (Supabase 연결 실패 시)
 const RECIPES_STORAGE_KEY = 'yorist_recipes';
@@ -60,8 +89,8 @@ export const saveRecipe = (recipe: Recipe): boolean => {
     const newRecipe = {
       ...recipe,
       id: recipe.id || generateId(),
-      createdAt: recipe.createdAt || new Date().toISOString(),
-      isFavorite: recipe.isFavorite ?? false
+      createdat: recipe.createdat || new Date().toISOString(),
+      isfavorite: recipe.isfavorite ?? false
     };
     
     const updatedRecipes = [newRecipe, ...existingRecipes];
@@ -72,11 +101,22 @@ export const saveRecipe = (recipe: Recipe): boolean => {
   }
 };
 
-// 레시피 저장 (Supabase 우선, localStorage 폴백)
+// 레시피 저장 (Supabase 우선, localStorage 폴백) - ingredients_master 연동
 export const saveRecipeAsync = async (recipe: Recipe): Promise<boolean> => {
   try {
+    // 재료 처리 (ingredients_master 테이블과 연동)
+    const processedIngredients = await processIngredients(recipe.ingredients);
+    
+    // 처리된 재료로 레시피 업데이트
+    const recipeWithProcessedIngredients = {
+      ...recipe,
+      ingredients: processedIngredients
+    };
+    
     // Supabase에 저장 시도
-    const supabaseRecipe = convertToSupabaseRecipe(recipe);
+    const supabaseRecipe = { ...convertToSupabaseRecipe(recipeWithProcessedIngredients) };
+    delete supabaseRecipe.isVegetarian;
+    // delete supabaseRecipe.videoUrl; // 컬럼명 맞추면 삭제 X
     const savedRecipe = await recipeService.createRecipe(supabaseRecipe);
     
     if (savedRecipe) {
@@ -86,7 +126,7 @@ export const saveRecipeAsync = async (recipe: Recipe): Promise<boolean> => {
     
     // Supabase 실패 시 localStorage 폴백
     console.warn('Supabase 저장 실패, localStorage로 폴백');
-    return saveRecipe(recipe);
+    return saveRecipe(recipeWithProcessedIngredients);
   } catch (error) {
     console.error('레시피 저장 실패:', error);
     return saveRecipe(recipe);
@@ -112,7 +152,7 @@ export const getRecipesAsync = async (): Promise<Recipe[]> => {
     
     if (supabaseRecipes.length > 0) {
       console.log('Supabase에서 레시피 조회 성공:', supabaseRecipes.length);
-      return supabaseRecipes.map(convertFromSupabaseRecipe);
+      return supabaseRecipes;
     }
     
     // Supabase 실패 시 localStorage 폴백
@@ -174,7 +214,7 @@ export const toggleRecipeFavorite = (recipeId: string): boolean => {
     const existingRecipes = getRecipes();
     const updatedRecipes = existingRecipes.map(recipe => 
       recipe.id === recipeId 
-        ? { ...recipe, isFavorite: !recipe.isFavorite }
+        ? { ...recipe, isfavorite: !recipe.isfavorite }
         : recipe
     );
     return safeLocalStorage.set(RECIPES_STORAGE_KEY, JSON.stringify(updatedRecipes));
@@ -231,7 +271,7 @@ export const getAllIngredientNames = (): string[] => {
 export const getFavoriteRecipes = (): Recipe[] => {
   try {
     const recipes = getRecipes();
-    return recipes.filter(recipe => recipe.isFavorite);
+    return recipes.filter(recipe => recipe.isfavorite);
   } catch (error) {
     console.error('즐겨찾기 레시피 조회 실패:', error);
     return [];

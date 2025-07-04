@@ -94,3 +94,23 @@ export const normalizeYouTubeUrl = (url: string): string => {
   
   return normalized;
 }; 
+
+// 유튜브 videoUrl에서 썸네일 URL을 생성하는 함수
+export function getYoutubeThumbnailUrl(videoUrl: string): string {
+  // 유튜브 ID 추출 (youtu.be/..., youtube.com/watch?v=... 등 지원)
+  let id = '';
+  try {
+    const url = new URL(videoUrl);
+    if (url.hostname === 'youtu.be') {
+      id = url.pathname.replace('/', '');
+    } else if (url.hostname.includes('youtube.com')) {
+      id = url.searchParams.get('v') || '';
+    }
+  } catch {
+    // fallback: 정규식
+    const match = videoUrl.match(/(?:youtu\.be\/|v=)([\w-]{11})/);
+    if (match) id = match[1];
+  }
+  if (!id) return '';
+  return `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
+} 

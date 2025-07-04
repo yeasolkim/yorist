@@ -1,53 +1,46 @@
-import { Recipe, HomeSection } from '@/lib/types';
+import { Recipe } from '@/lib/types';
 import RecipeCard from './RecipeCard';
 
 interface RecipeSectionProps {
-  section: HomeSection;
+  title: string;
+  recipes: Recipe[];
   onRecipeClick?: (recipe: Recipe) => void;
-  onFavoriteToggle?: (recipeId: string) => void;
-  onShowMore?: () => void;
+  onFavoriteToggle?: (recipeId: string, currentFavorite: boolean) => void;
+  showFavorite?: boolean;
   favorites?: Set<string>;
 }
 
 export default function RecipeSection({
-  section,
+  title,
+  recipes,
   onRecipeClick,
   onFavoriteToggle,
-  onShowMore,
+  showFavorite = false,
   favorites
 }: RecipeSectionProps) {
   
-  // 표시할 레시피 목록 (최대 개수 제한)
-  const displayRecipes = section.recipes.slice(0, section.maxItems || section.recipes.length);
-
   return (
-    <section className="mb-6 bg-[#181818] rounded-2xl px-0 py-4">
+    <section className="mb-6">
       {/* 섹션 헤더 */}
-      <div className="flex items-center justify-between mb-3 px-4">
-        <h2 className="text-white text-lg font-bold">{section.title}</h2>
-        {section.showMoreButton && section.recipes.length > (section.maxItems || 0) && (
-          <button
-            onClick={onShowMore}
-            className="text-xs text-primary font-bold px-3 py-2 rounded-full bg-[#181818] border border-primary hover:bg-primary hover:text-black transition"
-          >
-            더보기
-          </button>
-        )}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-white text-lg font-bold">{title}</h2>
+        <span className="text-gray-400 text-sm">{recipes.length}개의 레시피</span>
       </div>
+      
       {/* 레시피 카드 목록 */}
-      <div className="space-y-2 px-4">
-        {displayRecipes.map((recipe) => (
+      <div className="space-y-4">
+        {recipes.map((recipe) => (
           <RecipeCard
             key={recipe.id}
             recipe={recipe}
             onClick={() => onRecipeClick?.(recipe)}
-            showFavorite={true}
+            showFavorite={showFavorite}
             onFavoriteToggle={onFavoriteToggle}
             favorites={favorites}
           />
         ))}
-        {displayRecipes.length === 0 && (
-          <div className="text-center py-8 text-subtle">
+        {recipes.length === 0 && (
+          <div className="text-center py-8 text-gray-400">
             <p className="text-sm">레시피가 없습니다</p>
           </div>
         )}

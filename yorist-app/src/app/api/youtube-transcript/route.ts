@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
     if (!langMatch) {
       return NextResponse.json({ error: '한글 자막(자동 생성 포함)을 찾을 수 없습니다.' }, { status: 404 });
-    }
+        }
     // 4. 실제 한글 자막 XML 다운로드 (자동 생성 자막이면 kind=asr 파라미터 추가)
     const transcriptRes = await fetch(`https://video.google.com/timedtext?lang=ko&v=${videoId}${isAuto ? '&kind=asr' : ''}`);
     const transcriptXml = await transcriptRes.text();

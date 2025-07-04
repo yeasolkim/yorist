@@ -2,12 +2,13 @@
 import YoristHeader from '@/components/YoristHeader';
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Recipe, Ingredient } from '@/lib/types';
+import { Recipe, Ingredient, RecipeStep, RecipeIngredient } from '@/lib/types';
 import ManualRecipeForm from '@/components/ManualRecipeForm';
-import { getRecipes } from '@/lib/recipeUtils';
+import { recipeService } from '@/lib/supabase';
 import Link from 'next/link';
 import { getYouTubeVideoId, getYouTubeThumbnail, isValidYouTubeUrl } from '@/lib/youtubeUtils';
 import BottomNavigation from '@/components/BottomNavigation';
+import { createClient } from '@supabase/supabase-js';
 
 export default function RecipeDetailPage() {
   const router = useRouter();
@@ -21,93 +22,188 @@ export default function RecipeDetailPage() {
   const [shopUrlInput, setShopUrlInput] = useState('');
   const [editMode, setEditMode] = useState(false);
 
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    try {
-      const data = localStorage.getItem('yorist_recipes');
-      if (data) {
-        const recipes: Recipe[] = JSON.parse(data);
-        const found = recipes.find(r => r.id === id);
-        setRecipe(found || null);
-        if (found) {
-          // 관련 레시피 찾기: 하나 이상의 동일한 식재료를 포함하는 레시피(자기 자신 제외)
-          const myIngredients = found.ingredients.map(i => i.name);
-          const relatedRecipes = recipes.filter(r =>
-            r.id !== found.id &&
-            r.ingredients.some(ing => myIngredients.includes(ing.name))
-          );
-          setRelated(relatedRecipes);
-        } else {
-          setRelated([]);
-        }
-      } else {
+    recipeService.getRecipeById(id as string)
+      .then(found => {
+        setRecipe(found ? supabaseToRecipe(found) : null);
+        setRelated([]); // 관련 레시피는 추후 확장
+      })
+      .catch(() => {
         setRecipe(null);
         setRelated([]);
-      }
-    } catch (e) {
-      setRecipe(null);
-      setRelated([]);
-    } finally {
-      setLoading(false);
-    }
+      })
+      .finally(() => setLoading(false));
   }, [id]);
 
-  // 구매 링크 저장 핸들러
+  // 구매 링크 저장 핸들러 (Supabase 연동은 추후 확장)
   const handleSaveShopUrl = (ingredientId: string) => {
     if (!recipe) return;
     const updatedIngredients = recipe.ingredients.map(ing =>
-      ing.id === ingredientId ? { ...ing, shopUrl: shopUrlInput } : ing
+      ing.ingredient_id === ingredientId ? { ...ing, shopUrl: shopUrlInput } : ing
     );
     const updatedRecipe = { ...recipe, ingredients: updatedIngredients };
     setRecipe(updatedRecipe);
-    // localStorage 반영
-    try {
-      const data = localStorage.getItem('yorist_recipes');
-      if (data) {
-        const recipes: Recipe[] = JSON.parse(data);
-        const idx = recipes.findIndex(r => r.id === recipe.id);
-        if (idx !== -1) {
-          recipes[idx] = updatedRecipe;
-          localStorage.setItem('yorist_recipes', JSON.stringify(recipes));
-        }
-      }
-    } catch {}
     setEditingIngredientId(null);
     setShopUrlInput('');
   };
 
-  // 레시피 삭제
-  const handleDelete = () => {
+  // 레시피 삭제 (Supabase 연동)
+  const handleDelete = async () => {
     if (!recipe) return;
     if (!window.confirm('정말 이 레시피를 삭제하시겠습니까?')) return;
-    try {
-      const data = localStorage.getItem('yorist_recipes');
-      if (data) {
-        const recipes: Recipe[] = JSON.parse(data);
-        const updated = recipes.filter(r => r.id !== recipe.id);
-        localStorage.setItem('yorist_recipes', JSON.stringify(updated));
-      }
-    } catch {}
+    await recipeService.deleteRecipe(recipe.id);
     router.push('/');
   };
 
-  // 레시피 수정 저장
+  // 레시피 수정 저장 (Supabase 연동은 추후 확장)
   const handleEditSave = (updated: Recipe) => {
-    try {
-      const data = localStorage.getItem('yorist_recipes');
-      if (data) {
-        const recipes: Recipe[] = JSON.parse(data);
-        const idx = recipes.findIndex(r => r.id === updated.id);
-        if (idx !== -1) {
-          recipes[idx] = updated;
-          localStorage.setItem('yorist_recipes', JSON.stringify(recipes));
-        }
-      }
-    } catch {}
     setEditMode(false);
     setRecipe(updated);
   };
+
+  // Ingredient[] → RecipeIngredient[] 변환 함수
+  function convertIngredientsToRecipeIngredients(ingredients: Ingredient[]) {
+    return ingredients.map(ing => ({
+      ingredient_id: ing.id || '',
+      name: ing.name,
+      amount: ing.amount,
+      unit: ing.unit,
+      shopUrl: ing.shopUrl
+    }));
+  }
+
+  // 상세 페이지 내에서 재료 즐겨찾기 상태 관리
+  function RecipeDetailIngredients({ ingredients }: { ingredients: { ingredient_id: string; name: string; amount: string; unit: string; shopUrl: string }[] }) {
+    const [favoriteMap, setFavoriteMap] = useState<Record<string, boolean>>({});
+    useEffect(() => {
+      const ids = ingredients.map(ing => ing.ingredient_id).filter(Boolean);
+      if (ids.length === 0) return;
+      supabase
+        .from('ingredients_master')
+        .select('id, is_favorite')
+        .in('id', ids)
+        .then(({ data }) => {
+          const map: Record<string, boolean> = {};
+          data?.forEach((row: any) => { map[row.id] = row.is_favorite; });
+          setFavoriteMap(map);
+        });
+    }, [ingredients]);
+    const toggleFavorite = async (ingredient_id: string) => {
+      const newVal = !favoriteMap[ingredient_id];
+      setFavoriteMap(map => ({ ...map, [ingredient_id]: newVal }));
+      await supabase
+        .from('ingredients_master')
+        .update({ is_favorite: newVal })
+        .eq('id', ingredient_id);
+    };
+    return (
+      <ul>
+        {ingredients.map(ing => (
+          <li key={ing.ingredient_id || ing.name} className="flex items-center gap-2 mb-1">
+            <span>{ing.name} {ing.amount} {ing.unit}</span>
+            {ing.ingredient_id && (
+              <button
+                onClick={() => toggleFavorite(ing.ingredient_id)}
+                className={favoriteMap[ing.ingredient_id] ? 'text-orange-400' : 'text-gray-400'}
+                aria-label="즐겨찾기"
+              >
+                {favoriteMap[ing.ingredient_id] ? '♥' : '♡'}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  // SupabaseRecipe → Recipe 변환 시 id undefined 방지 및 타입 일치
+  function supabaseToRecipe(r: any): Recipe {
+    return {
+      id: r.id || '',
+      title: r.title,
+      description: r.description,
+      ingredients: (r.ingredients || []).map((ing: any) => ({
+        ingredient_id: ing.ingredient_id || '',
+        name: ing.name,
+        amount: ing.amount,
+        unit: ing.unit,
+        shopUrl: ing.shopUrl
+      })),
+      steps: r.steps || [],
+      videoUrl: r.videoUrl,
+      channel: r.channel,
+      createdat: r.createdat ? new Date(r.createdat) : new Date(),
+      isfavorite: r.isfavorite || false
+    };
+  }
+
+  // 재료 그룹 분리 함수
+  function getIngredientGroups(recipe: Recipe) {
+    const commonIngredients: RecipeIngredient[] = [];
+    const extraIngredients: RecipeIngredient[] = [];
+
+    const ingredientMap: Record<string, RecipeIngredient> = {};
+    recipe.ingredients.forEach(ing => {
+      ingredientMap[ing.ingredient_id] = ing;
+    });
+
+    const allIngredients = Object.values(ingredientMap);
+
+    allIngredients.forEach(ing => {
+      if (ing.shopUrl) {
+        commonIngredients.push(ing);
+      } else {
+        extraIngredients.push(ing);
+      }
+    });
+
+    return { common: commonIngredients, extra: extraIngredients };
+  }
+
+  // 필요한 재료 표시 부분에 하트 버튼 추가
+  function IngredientFavoriteRow({ ingredient }: { ingredient: RecipeIngredient }) {
+    const [isFavorite, setIsFavorite] = useState(false);
+    useEffect(() => {
+      if (!ingredient.ingredient_id) return;
+      supabase
+        .from('ingredients_master')
+        .select('is_favorite')
+        .eq('id', ingredient.ingredient_id)
+        .single()
+        .then(({ data }) => setIsFavorite(data?.is_favorite || false));
+    }, [ingredient.ingredient_id]);
+    const toggleFavorite = async () => {
+      if (!ingredient.ingredient_id) return;
+      const newVal = !isFavorite;
+      setIsFavorite(newVal);
+      await supabase
+        .from('ingredients_master')
+        .update({ is_favorite: newVal })
+        .eq('id', ingredient.ingredient_id);
+    };
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-white font-medium flex-1">{ingredient.name}</span>
+        <span className="text-gray-400 text-sm">{ingredient.amount} {ingredient.unit}</span>
+        {ingredient.shopUrl && (
+          <a href={ingredient.shopUrl} target="_blank" rel="noopener noreferrer" className="ml-2 px-3 py-1 bg-orange-500 text-white rounded-full text-xs font-bold hover:bg-orange-600 transition">구매하기</a>
+        )}
+        {ingredient.ingredient_id && (
+          <button
+            onClick={toggleFavorite}
+            className={`ml-2 text-lg ${isFavorite ? 'text-orange-400' : 'text-gray-400'}`}
+            aria-label="재료 즐겨찾기"
+          >
+            {isFavorite ? '♥' : '♡'}
+          </button>
+        )}
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -147,18 +243,10 @@ export default function RecipeDetailPage() {
     );
   }
 
-  // 재료 표시용: 이름-이모지 매핑 적용
+  // 재료 표시용
   const displayIngredients = recipe.ingredients;
 
-  // 식재료 비교 함수
-  const getIngredientGroups = (target: Recipe): { common: Ingredient[]; extra: Ingredient[] } => {
-    const myNames = new Set(recipe.ingredients.map(i => i.name));
-    const common = target.ingredients.filter(i => myNames.has(i.name));
-    const extra = target.ingredients.filter(i => !myNames.has(i.name));
-    return { common, extra };
-  };
-
-  // 관련 레시피에 이름-이모지 매핑 적용
+  // 관련 레시피(추후 Supabase 연동 확장)
   const relatedWithEmoji = related.map(r => ({
     ...r,
     ingredients: r.ingredients.map(ing => ({
@@ -283,55 +371,7 @@ export default function RecipeDetailPage() {
             </h2>
             <div className="flex flex-col gap-3">
               {displayIngredients.map((ingredient) => (
-                <div key={ingredient.id} className="flex items-center gap-3 bg-[#181818] border border-[#232323] rounded-xl px-4 py-3">
-                  <span className="text-white font-medium flex-1">{ingredient.name}</span>
-                  <span className="text-gray-400 text-sm">{ingredient.amount} {ingredient.unit}</span>
-                  {ingredient.shopUrl ? (
-                    <a
-                      href={ingredient.shopUrl.startsWith('http') ? ingredient.shopUrl : `http://${ingredient.shopUrl}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ml-2 px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-medium transition-colors min-w-[64px] min-h-[32px] flex items-center justify-center"
-                    >
-                      구매하기
-                    </a>
-                  ) : editingIngredientId === ingredient.id ? (
-                    <div className="flex gap-2 items-center ml-2">
-                      <input
-                        type="text"
-                        value={shopUrlInput}
-                        onChange={e => setShopUrlInput(e.target.value)}
-                        placeholder="구매 링크 입력"
-                        className="bg-[#232323] border border-[#3a3a3a] text-white rounded-xl px-2 py-1 text-xs w-32 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200"
-                      />
-                      <button
-                        className="px-2 py-1 bg-orange-400 text-white rounded-xl text-xs font-medium hover:bg-orange-500 transition-colors"
-                        onClick={() => handleSaveShopUrl(ingredient.id)}
-                        type="button"
-                      >
-                        저장
-                      </button>
-                      <button
-                        className="px-2 py-1 bg-[#232323] text-white rounded-xl text-xs font-medium hover:bg-[#3a3a3a] transition-colors"
-                        onClick={() => { setEditingIngredientId(null); setShopUrlInput(''); }}
-                        type="button"
-                      >
-                        취소
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 ml-2">
-                      <span className="text-gray-500 text-xs">링크 없음</span>
-                      <button
-                        className="px-2 py-1 bg-[#232323] text-white rounded-xl text-xs font-medium hover:bg-orange-500 hover:text-white transition-colors border border-[#3a3a3a]"
-                        onClick={() => { setEditingIngredientId(ingredient.id); setShopUrlInput(''); }}
-                        type="button"
-                      >
-                        링크 추가
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <IngredientFavoriteRow key={ingredient.ingredient_id} ingredient={ingredient} />
               ))}
             </div>
           </div>
@@ -358,7 +398,7 @@ export default function RecipeDetailPage() {
                         <span className="text-gray-400 text-xs ml-1">({common.length}개)</span>
                         <div className="flex flex-wrap gap-2 mt-1">
                           {common.map(ing => (
-                            <span key={ing.id} className="inline-flex items-center gap-1 bg-[#232323] text-white text-xs px-3 py-1.5 rounded-full border border-[#333]">
+                            <span key={ing.ingredient_id} className="inline-flex items-center gap-1 bg-[#232323] text-white text-xs px-3 py-1.5 rounded-full border border-[#333]">
                               <span>{ing.name}</span>
                             </span>
                           ))}
@@ -369,7 +409,7 @@ export default function RecipeDetailPage() {
                         <span className="text-gray-500 text-xs ml-1">({extra.length}개)</span>
                         <div className="flex flex-wrap gap-2 mt-1">
                           {extra.map(ing => (
-                            <span key={ing.id} className="inline-flex items-center gap-1 bg-[#232323] text-white text-xs px-3 py-1.5 rounded-full border border-[#333]">
+                            <span key={ing.ingredient_id} className="inline-flex items-center gap-1 bg-[#232323] text-white text-xs px-3 py-1.5 rounded-full border border-[#333]">
                               <span>{ing.name}</span>
                             </span>
                           ))}
