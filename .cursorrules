@@ -1,0 +1,135 @@
+# Cursor AI 작업 규칙
+
+## 기본 작업 원칙
+
+### 1. 작업 계획 사전 설명
+- 모든 작업 실행 전에 구체적인 계획을 먼저 설명
+- 단계별 접근 방법과 예상 결과를 명시
+- 복잡한 작업의 경우 의사결정 트리나 플로우차트 제공
+
+### 2. 중요 작업 사전 승인
+- 데이터베이스 스키마 변경
+- 새로운 라이브러리/프레임워크 도입
+- 기존 코드 구조 대폭 수정
+- API 엔드포인트 변경
+- 환경 설정 파일 수정
+- 배포 관련 설정 변경
+
+### 3. 영향도 사전 협의
+- 다른 모듈/컴포넌트에 영향을 주는 변경사항
+- 공통 컴포넌트 수정
+- 전역 상태 관리 변경
+- 라우팅 구조 변경
+- 스타일 시스템 변경
+
+## 코드 작성 규칙
+
+### 1. 한글 주석 필수
+```javascript
+// 사용자 정보를 가져오는 함수
+const getUserInfo = (userId) => {
+  // 데이터베이스에서 사용자 정보 조회
+  const user = await db.users.findUnique({
+    where: { id: userId }
+  });
+  
+  // 사용자가 존재하지 않는 경우 기본값 반환
+  if (!user) {
+    return defaultUserInfo;
+  }
+  
+  return user;
+};
+```
+
+### 2. 명확한 변수명 사용
+```javascript
+// 좋은 예
+const userProfileData = getUserProfile();
+const recipeList = getRecipeList();
+const isUserLoggedIn = checkLoginStatus();
+
+// 피해야 할 예
+const data = getData();
+const list = getList();
+const flag = checkFlag();
+```
+
+### 3. 에러 처리 우선
+```javascript
+// 항상 에러 가능성을 고려한 코드 작성
+const fetchRecipeData = async (recipeId) => {
+  try {
+    // API 호출 시 타임아웃 설정
+    const response = await fetch(`/api/recipes/${recipeId}`, {
+      timeout: 5000
+    });
+    
+    // 응답 상태 확인
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // 데이터 유효성 검증
+    if (!data || !data.id) {
+      throw new Error('유효하지 않은 레시피 데이터');
+    }
+    
+    return data;
+  } catch (error) {
+    // 에러 로깅 및 사용자 친화적 메시지 반환
+    console.error('레시피 데이터 조회 실패:', error);
+    return {
+      error: true,
+      message: '레시피를 불러오는데 실패했습니다. 다시 시도해주세요.'
+    };
+  }
+};
+```
+
+## 전문성 및 코드 품질
+
+### 1. 전문가 수준 구현
+- 최신 개발 패턴과 베스트 프랙티스 적용
+- 성능 최적화 고려
+- 보안 취약점 방지
+- 접근성(Accessibility) 고려
+
+### 2. 복잡성 최소화
+- 과도한 추상화 지양
+- 직관적인 코드 구조 유지
+- 불필요한 의존성 최소화
+- 명확한 책임 분리
+
+### 3. 가독성 중심
+- 적절한 함수/클래스 크기 유지
+- 일관된 코드 스타일 적용
+- 논리적 코드 흐름 구성
+- 의미있는 네이밍 컨벤션
+
+## 특별 고려사항
+
+### 1. 한국어 환경 최적화
+- 한글 폰트 및 인코딩 고려
+- 한국어 텍스트 길이에 따른 UI 적응
+- 한국 사용자 패턴 반영
+
+### 2. 모바일 우선 설계
+- 반응형 디자인 필수
+- 터치 인터페이스 최적화
+- 성능 및 로딩 속도 고려
+
+### 3. 확장성 고려
+- 미래 기능 추가를 고려한 구조
+- 모듈화된 컴포넌트 설계
+- 설정 기반 구현
+
+## 작업 플로우
+
+1. **계획 수립**: 작업 목표와 방법론 설명
+2. **승인 요청**: 중요 작업에 대한 사용자 승인
+3. **협의 진행**: 영향도가 있는 변경사항 논의
+4. **구현 실행**: 규칙에 따른 코드 작성
+5. **검증 완료**: 에러 처리 및 품질 확인 
