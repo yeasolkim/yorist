@@ -154,7 +154,7 @@ export default function HomePage() {
 
   // 레시피 자동 생성 핸들러 (현재 데이터베이스 구조에 맞게 수정)
   const prompt = youtubeUrl
-    ? `아래 유튜브 영상의 스크립트를 분석해서, 요리 레시피 데이터를 json 형식으로 만들어줘.\n\n현재 데이터베이스 구조에 맞춰서 다음 형식으로 출력해줘:\n\n{\n  "title": "레시피 제목",\n  "description": "레시피 설명",\n  "ingredients": [\n    {\n      "name": "재료명",\n      "amount": "수량",\n      "unit": "단위",\n      "shopUrl": "구매링크(선택사항)"\n    }\n  ],\n  "steps": [\n    {\n      "description": "조리 단계 설명"\n    }\n  ],\n  "videourl": "${youtubeUrl}"\n}\n\n다른 설명 없이 json 데이터만 출력해줘.\n\n유튜브 링크: ${youtubeUrl}`
+    ? `아래 유튜브 영상의 스크립트를 분석해서, 요리 레시피 데이터를 json 형식으로 만들어줘.\n\n현재 데이터베이스 구조에 맞춰서 다음 형식으로 출력해줘:\n\n{\n  "title": "레시피 제목",\n  "description": "레시피 설명",\n  "ingredients": [\n    {\n      "name": "재료명",\n      "amount": "수량",\n      "unit": "단위",\n      "shopUrl": "구매링크(선택사항)"\n    }\n  ],\n  "steps": [\n    {\n      "description": "조리 단계 설명",\n      "isImportant": false\n    }\n  ],\n  "videourl": "${youtubeUrl}"\n}\n\n- steps 배열의 모든 객체에는 반드시 isImportant: false 필드를 포함해야 해.\n- 각 단계는 반드시 description(문자열)과 isImportant(boolean, 기본값 false) 필드를 모두 포함해야 해.\n- 다른 설명 없이 json 데이터만 출력해줘.\n\n유튜브 링크: ${youtubeUrl}`
     : '';
 
   const handleCopyPrompt = () => {

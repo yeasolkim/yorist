@@ -132,27 +132,54 @@ export default function AddRecipePage() {
     setSteps(steps.filter((_, i) => i !== index));
   };
 
-  // 폼 제출 핸들러
-  const handleSubmit = (e: React.FormEvent) => {
+  // 폼 제출 핸들러 (Supabase 연동)
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // 레시피 데이터 생성
-    const recipe: Recipe = {
-      id: Date.now().toString(),
-      title: formData.title,
-      description: formData.description,
-      videoUrl: formData.videoUrl,
-      ingredients,
-      steps,
-      createdat: new Date(),
-      isfavorite: false
-    };
+    try {
+      // 레시피 데이터를 Supabase 형식으로 변환
+      const supabaseRecipe = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        ingredients: ingredients.map(ing => ({
+          ingredient_id: ing.ingredient_id,
+          name: ing.name,
+          amount: ing.amount,
+          unit: ing.unit,
+          shopUrl: ing.shopUrl
+        })),
+        steps: steps.map(step => ({
+          description: step.description,
+          isImportant: step.isImportant || false
+        })),
+        videoUrl: formData.videoUrl.trim() || null,
+        channel: null,
+        tags: [],
+        isVegetarian: false,
+        isfavorite: false,
+        createdat: new Date().toISOString()
+      };
 
-    // TODO: API로 레시피 저장
-    console.log('새 레시피:', recipe);
-    
-    // 홈페이지로 이동
-    router.push('/');
+      // Supabase에 레시피 저장
+      const { data: savedRecipe, error } = await supabase
+        .from('recipes')
+        .insert(supabaseRecipe)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('레시피 저장 실패:', error);
+        alert('레시피 저장에 실패했습니다. 다시 시도해주세요.');
+        return;
+      }
+
+      // 성공 시 홈페이지로 이동
+      router.push('/');
+      
+    } catch (error) {
+      console.error('레시피 저장 중 오류:', error);
+      alert('레시피 저장 중 오류가 발생했습니다.');
+    }
   };
 
   // 레시피 저장/수정 시에도 재료의 shopUrl이 변경되면 ingredients_master update
@@ -191,12 +218,7 @@ export default function AddRecipePage() {
           </svg>
         </button>
         <h1 className="text-lg font-bold text-white">레시피 추가</h1>
-        <button
-          onClick={handleSubmit}
-          className="bg-gradient-to-r from-orange-400 to-orange-500 text-white font-bold px-5 py-2 rounded-xl shadow hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
-        >
-          저장
-        </button>
+        <div className="w-10"></div> {/* 우측 여백을 위한 빈 div */}
       </header>
 
       {/* 메인 폼 */}
@@ -398,6 +420,24 @@ export default function AddRecipePage() {
           </section>
         </form>
       </main>
+
+      {/* 저장/취소 버튼 - 하단 고정 */}
+      <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-[#232323] px-4 py-4">
+        <div className="max-w-md mx-auto flex gap-3">
+          <button
+            onClick={() => router.back()}
+            className="flex-1 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-white rounded-xl py-3 font-medium transition-colors min-h-[52px]"
+          >
+            취소
+          </button>
+          <button
+            onClick={handleSubmit}
+            className="flex-1 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white rounded-xl py-3 font-medium transition-all duration-200 min-h-[52px] shadow-lg hover:shadow-xl"
+          >
+            저장
+          </button>
+        </div>
+      </div>
     </div>
   );
 } 

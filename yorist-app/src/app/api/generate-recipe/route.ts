@@ -5,7 +5,21 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 // 레시피 생성용 프롬프트 생성 함수
 function buildRecipePrompt(transcript: string, youtubeUrl: string) {
-  return `아래 유튜브 영상의 자막을 분석해서, 요리 레시피 데이터를 json 형식으로 만들어줘.\njson에는 title(제목), description(설명), ingredients(재료 배열: {name, amount, unit, shopUrl}), steps(조리 단계 배열: {description}), videoUrl(유튜브 링크), channel(채널명) 필드가 포함되어야 해.\n다른 설명 없이 json 데이터만 출력해줘.\n\n유튜브 링크: ${youtubeUrl}\n\n자막:\n${transcript}`;
+  return `아래 유튜브 영상의 자막을 분석해서, 요리 레시피 데이터를 json 형식으로 만들어줘.\n
+json에는 title(제목), description(설명), ingredients(재료 배열: {name, amount, unit, shopUrl}), steps(조리 단계 배열: {description, isImportant}), videoUrl(유튜브 링크), channel(채널명) 필드가 포함되어야 해.\n
+특히 steps(조리 단계) 배열의 모든 객체에는 반드시 isImportant: false 필드를 포함해야 해.\n
+아래 예시처럼 만들어줘:\n
+예시:\n[
+  {
+    "description": "가지를 깨끗하게 씻고, 꼭지 주변의 가시에 주의합니다.",
+    "isImportant": false
+  },
+  {
+    "description": "카르파치오용 가지는 꼭지를 떼어낸 후 어슷썰고, 얇게 썰어 물을 조금 뿌린 뒤 랩을 씌워 전자레인지에 1분 30초 돌려 식혀줍니다.",
+    "isImportant": false
+  }
+]\n
+각 단계는 반드시 description(문자열)과 isImportant(boolean, 기본값 false) 필드를 모두 포함해야 해.\n다른 설명 없이 json 데이터만 출력해줘.\n\n유튜브 링크: ${youtubeUrl}\n\n자막:\n${transcript}`;
 }
 
 // POST /api/generate-recipe

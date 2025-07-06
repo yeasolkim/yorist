@@ -148,17 +148,16 @@ export default function RecipeDetailPage() {
     try {
       // ingredients 변환
       const dbIngredients = toDbIngredients(updated.ingredients);
-
-      const result = await recipeService.updateRecipe(updated.id, {
+      // DB 컬럼명/타입에 맞게 변환
+      const updateObj = {
         title: updated.title,
         description: updated.description,
-        ingredients: dbIngredients, // 변환된 값 사용
+        ingredients: dbIngredients,
         steps: updated.steps,
-        videourl: updated.videoUrl,
-        isVegetarian: updated.isVegetarian,
+        videourl: updated.videoUrl || undefined,
         isfavorite: updated.isfavorite
-      });
-
+      };
+      const result = await recipeService.updateRecipe(updated.id, updateObj);
       if (result) {
         setEditMode(false);
         setRecipe(updated);
@@ -206,7 +205,7 @@ export default function RecipeDetailPage() {
       setFavoriteMap(map => ({ ...map, [ingredient_id]: newVal }));
       await supabase
         .from('ingredients_master')
-        .update({ is_favorite: newVal })
+        .update({ is_favorite: newVal ? 'true' : 'false' })
         .eq('id', ingredient_id);
     };
     return (
@@ -287,7 +286,7 @@ export default function RecipeDetailPage() {
         .eq('id', ingredient.ingredient_id)
         .single()
         .then(({ data }) => {
-          setIsFavorite(data?.is_favorite || false);
+          setIsFavorite(data?.is_favorite === 'true');
           setIngredientInfo((prev) => ({ ...prev, shopUrl: data?.shop_url || prev.shopUrl }));
         });
     }, [ingredient.ingredient_id]);
@@ -298,7 +297,7 @@ export default function RecipeDetailPage() {
       // 1. DB 업데이트
       await supabase
         .from('ingredients_master')
-        .update({ is_favorite: newVal })
+        .update({ is_favorite: newVal ? 'true' : 'false' })
         .eq('id', ingredient.ingredient_id);
       // 2. 최신 정보 refetch
       const { data } = await supabase
@@ -306,7 +305,7 @@ export default function RecipeDetailPage() {
         .select('is_favorite, shop_url')
         .eq('id', ingredient.ingredient_id)
         .single();
-      setIsFavorite(data?.is_favorite || false);
+      setIsFavorite(data?.is_favorite === 'true');
       setIngredientInfo((prev) => ({ ...prev, shopUrl: data?.shop_url || prev.shopUrl }));
     };
     return (
@@ -407,302 +406,311 @@ export default function RecipeDetailPage() {
   return (
     <div className="min-h-screen bg-black pb-24 px-2 sm:px-4 pt-4 sm:pt-6 overflow-y-auto max-w-md mx-auto">
       <YoristHeader />
-      
-      {/* 레시피 제목 - 심플하게 상단에만 표시 */}
-      <div className="mb-3 sm:mb-4">
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* 뒤로가기 버튼 - 제목 왼쪽 */}
-          <button
-            onClick={() => router.back()}
-            className="mr-2 p-1 rounded-full bg-[#232323] hover:bg-[#2a2a2a] text-white flex items-center justify-center focus:outline-none"
-            aria-label="뒤로가기"
-            style={{ minWidth: 32, minHeight: 32 }}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div className="flex-1 flex flex-col items-center">
-            <h1 className="text-lg sm:text-xl font-bold text-white leading-tight text-center">{recipe.title}</h1>
-            {/* 주황색 밑줄(50% 길이, 중앙)로 강조 */}
-            <div className="w-1/2 h-[2.5px] bg-gradient-to-r from-orange-400 to-orange-500 rounded-full mx-auto mt-2" aria-hidden="true"></div>
-          </div>
-        </div>
-      </div>
-      
-      {/* 썸네일+설명 토글을 하나의 카드로 통합 */}
-      <div className="mb-1 sm:mb-4 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg sm:rounded-2xl shadow-lg overflow-hidden">
-        {/* 이미지 썸네일 */}
-        <div className="relative w-full aspect-video">
-          {recipe.videoUrl && isValidYouTubeUrl(recipe.videoUrl) ? (
-            <img
-              src={getYouTubeThumbnail(getYouTubeVideoId(recipe.videoUrl) || '', 'hq')}
-              alt="유튜브 썸네일"
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full bg-[#232323] flex items-center justify-center text-gray-500 text-base sm:text-lg">
-              대표 이미지 없음
-            </div>
-          )}
-          {/* 유튜브 바로가기 버튼은 유지 */}
-          {recipe.videoUrl && isValidYouTubeUrl(recipe.videoUrl) && (
-            <a
-              href={recipe.videoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 bg-red-600 text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-2 shadow-lg hover:bg-red-700 transition-colors text-xs sm:text-sm font-bold"
-            >
-              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M10 15l5.19-3L10 9v6zm12-3c0-5.52-4.48-10-10-10S2 6.48 2 12s4.48 10 10 10 10-4.48 10-10zm-2 0c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8 8 3.58 8 8z" />
-              </svg>
-              유튜브에서 보기
-            </a>
-          )}
-        </div>
-        {/* 레시피 설명 토글 - 여백 더 축소 */}
-        {recipe.description && (
-          <div className="p-1 sm:p-4 border-t border-[#232323]">
-            <button
-              className="flex items-center gap-1 text-orange-400 text-xs sm:text-xs font-semibold focus:outline-none hover:underline"
-              onClick={() => setShowDescription(prev => !prev)}
-              aria-expanded={showDescription}
-              aria-controls="recipe-desc"
-            >
-              {showDescription ? '설명 닫기' : '설명 보기'}
-              <svg className={`w-4 h-4 transition-transform ${showDescription ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            {showDescription && (
-              <p id="recipe-desc" className="text-gray-400 text-xs sm:text-sm mt-0.5 leading-relaxed animate-fadeIn">{recipe.description}</p>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 레시피 정보 카드(상단 네비+제목+버튼+채널+설명) */}
-      {/* (불필요한 레시피 정보 카드 전체 삭제) */}
-
-      {/* 일반 모드(재료, 조리단계, 관련 레시피 등)는 editMode가 아닐 때만 렌더링 */}
-      {!editMode && (
+      {editMode ? (
+        <ManualRecipeForm
+          initialRecipe={recipe}
+          onSave={handleEditSave}
+          onCancel={() => setEditMode(false)}
+        />
+      ) : (
         <>
-          {/* 필요한 재료 - 한 줄 리스트형, 구분선, 심플 구매 버튼, 가독성 강조 */}
-          <div className="mt-4 sm:mt-8">
-            <h2 className="text-base sm:text-xl font-bold text-white mb-2 sm:mb-4 flex items-center gap-1 sm:gap-2">
-              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              필요한 재료
-            </h2>
-            <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-              {displayIngredients.map((ingredient) => (
-                // 카드 전체를 Link로 감싸 재료 상세로 이동
-                <Link
-                  key={ingredient.ingredient_id}
-                  href={`/ingredient/${ingredient.ingredient_id}`}
-                  className="block"
-                  tabIndex={0}
-                >
-                  {/* 재료카드 내부 버튼 그룹 구조 개선 - 오른쪽 padding, 버튼 위치 조정 */}
-                  <div className="bg-[#232323] rounded-xl px-3 py-2 mb-2 flex items-center relative pr-14 overflow-hidden">
-                    {/* 재료명, 수량 */}
-                    <span className="font-semibold text-white truncate max-w-[60px] ml-1 text-xs">{ingredient.name}</span>
-                    <span className="ml-1 text-gray-400 text-xs truncate">{ingredient.amount} {ingredient.unit}</span>
-                    {/* 버튼 그룹 - 오른쪽 끝에 고정, 위치 조정 */}
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 items-center">
-                      {/* 장바구니 버튼 - 하트 왼쪽 */}
-                      {ingredient.shopUrl && (
-                        <a
-                          href={ingredient.shopUrl?.startsWith('http') ? ingredient.shopUrl : `https://${ingredient.shopUrl}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-center p-0.5 border border-orange-400 text-orange-500 rounded-full hover:bg-orange-50 transition"
-                          aria-label="구매링크"
-                          style={{ lineHeight: '1.2' }}
-                          onClick={e => e.stopPropagation()}
-                          tabIndex={-1}
-                        >
-                          {/* 장바구니 아이콘 */}
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path d="M3 3h2l.4 2M7 13h10l4-8H5.4" strokeLinecap="round" strokeLinejoin="round"/>
-                            <circle cx="9" cy="21" r="1" />
-                            <circle cx="20" cy="21" r="1" />
-                          </svg>
-                        </a>
-                      )}
-                      {/* 즐겨찾기 버튼 - 항상 맨 오른쪽 */}
-                      <button
-                        onClick={async e => {
-                          e.preventDefault(); e.stopPropagation();
-                          if (ingredient.ingredient_id) {
-                            // 1. DB에서 현재 즐겨찾기 상태 조회 및 토글
-                            const { data } = await supabase
-                              .from('ingredients_master')
-                              .select('is_favorite')
-                              .eq('id', ingredient.ingredient_id)
-                              .single();
-                            const newVal = !data?.is_favorite;
-                            await supabase
-                              .from('ingredients_master')
-                              .update({ is_favorite: newVal })
-                              .eq('id', ingredient.ingredient_id);
-                            triggerIngredientSync();
-                            // 2. 로컬 상태도 즉시 반영 (하트 색상 즉시 변경)
-                            setRecipe(prev => prev ? {
-                              ...prev,
-                              ingredients: prev.ingredients.map(ing =>
-                                ing.ingredient_id === ingredient.ingredient_id
-                                  ? { ...ing, is_favorite: newVal }
-                                  : ing
-                              )
-                            } : prev);
-                          }
-                        }}
-                        className="text-lg focus:outline-none text-gray-400 hover:text-orange-400"
-                        aria-label="즐겨찾기"
-                        tabIndex={-1}
-                      >
-                        <svg className="w-3 h-3" fill={ingredient.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* 조리 단계 - 아래로 이동 (상세화면에서 중요 체크박스 UI 추가) */}
-          <div className="mt-4 sm:mt-6">
-            <div className="flex items-center gap-2 mb-2">
-              <h2 className="text-base sm:text-xl font-bold text-white flex items-center gap-1 sm:gap-2 mb-0">
-                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                조리 단계
-              </h2>
-              {/* 커스텀 체크박스: 체크 시 주황, 해제 시 회색, 테두리/배경 없음 */}
-              <label className={`flex items-center gap-1 ml-auto text-xs font-semibold cursor-pointer select-none transition-colors ${showImportantOnly ? 'text-orange-400' : 'text-gray-400'}`}
-                aria-checked={showImportantOnly}
-                tabIndex={0}
-                role="checkbox"
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setShowImportantOnly(v => !v); }}
+          {/* 레시피 제목 - 심플하게 상단에만 표시 */}
+          <div className="mb-3 sm:mb-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* 뒤로가기 버튼 - 제목 왼쪽 */}
+              <button
+                onClick={() => router.back()}
+                className="mr-2 p-1 rounded-full bg-[#232323] hover:bg-[#2a2a2a] text-white flex items-center justify-center focus:outline-none"
+                aria-label="뒤로가기"
+                style={{ minWidth: 32, minHeight: 32 }}
               >
-                {/* 실제 체크박스는 숨김 */}
-                <input
-                  type="checkbox"
-                  checked={showImportantOnly}
-                  onChange={e => setShowImportantOnly(e.target.checked)}
-                  className="hidden"
-                  tabIndex={-1}
-                />
-                {/* 체크 표시(v)만 심플하게 */}
-                <span className="text-lg align-middle select-none" aria-hidden="true">
-                  {showImportantOnly ? '✔' : '✔'}
-                </span>
-                중요 조리단계만 보기
-              </label>
-            </div>
-            <div className="space-y-1 sm:space-y-2">
-              {(showImportantOnly ? recipe.steps.filter(step => step.isImportant) : recipe.steps).map((step, i) => (
-                <div
-                  key={`${step.description}-${i}`}
-                  className={`border border-[#2a2a2a] rounded-lg sm:rounded-2xl p-2 sm:p-3 shadow-lg hover:border-[#3a3a3a] transition-all duration-200 flex items-center ${step.isImportant ? 'bg-orange-500/20' : 'bg-[#1a1a1a]'}`}
-                >
-                  <div className="flex items-start gap-2 sm:gap-3 flex-1">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center text-white font-bold text-base sm:text-lg shadow-lg flex-shrink-0">
-                      {i + 1}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm sm:text-base text-white leading-relaxed mb-0.5 sm:mb-1">{step.description}</p>
-                    </div>
-                  </div>
-                  {/* 중요 체크박스 - 상세화면에서 바로 토글 */}
-                  <button
-                    onClick={async () => {
-                      const newSteps = [...recipe.steps];
-                      newSteps[i] = { ...newSteps[i], isImportant: !newSteps[i].isImportant };
-                      setRecipe({ ...recipe, steps: newSteps });
-                      await supabase
-                        .from('recipes')
-                        .update({ steps: newSteps })
-                        .eq('id', recipe.id);
-                    }}
-                    className={`ml-3 transition-all duration-200 ${
-                      step.isImportant 
-                        ? 'text-orange-400' 
-                        : 'text-gray-400 hover:text-gray-300'
-                    }`}
-                    aria-label="중요 단계 표시"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div className="flex-1 flex flex-col items-center">
+                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight text-center">{recipe.title}</h1>
+                {/* 주황색 밑줄(50% 길이, 중앙)로 강조 */}
+                <div className="w-1/2 h-[2.5px] bg-gradient-to-r from-orange-400 to-orange-500 rounded-full mx-auto mt-2" aria-hidden="true"></div>
+              </div>
             </div>
           </div>
-
-          {/* 관련 레시피 */}
-          <div className="mt-6 sm:mt-10">
-            <h2 className="text-base sm:text-xl font-bold text-white mb-2 sm:mb-4 flex items-center gap-1 sm:gap-2">
-              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-              관련 레시피
-            </h2>
-            {related.length === 0 ? (
-              <div className="bg-black border border-[#232323] rounded-lg sm:rounded-2xl p-3 sm:p-6 text-gray-500 text-center">관련 레시피가 없습니다</div>
-            ) : (
-              <div className="flex flex-col gap-2 sm:gap-4">
-                {related.map((rel: any) => (
-                  <Link key={rel.id} href={`/recipe/${rel.id}`} passHref legacyBehavior>
-                    <a style={{ display: 'block' }}>
-                      <div className="bg-black border border-[#232323] rounded-lg sm:rounded-2xl p-3 sm:p-5 hover:border-orange-400 transition cursor-pointer">
-                        <div className="text-white font-bold text-base sm:text-lg mb-1 sm:mb-2">{rel.title}</div>
-                        <div className="mb-1 sm:mb-2">
-                          <div className="flex flex-wrap gap-1 sm:gap-2">
-                            {rel._commonNames.map((name: string, idx: number) => (
-                              <span key={name + idx} className="bg-orange-500 text-white text-xs px-2 py-1 rounded-full font-bold">{name}</span>
-                            ))}
-                            {rel.ingredients.filter((ing: any) => !rel._commonNames.includes(ing.name)).map((ing: any) => (
-                              <span key={ing.ingredient_id} className="bg-[#232323] text-gray-400 text-xs px-2 py-1 rounded-full border border-[#3a3a3a]">{ing.name}</span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </a>
-                  </Link>
-                ))}
+          
+          {/* 썸네일+설명 토글을 하나의 카드로 통합 */}
+          <div className="mb-1 sm:mb-4 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg sm:rounded-2xl shadow-lg overflow-hidden">
+            {/* 이미지 썸네일 */}
+            <div className="relative w-full aspect-video">
+              {recipe.videoUrl && isValidYouTubeUrl(recipe.videoUrl) ? (
+                <img
+                  src={getYouTubeThumbnail(getYouTubeVideoId(recipe.videoUrl) || '', 'hq')}
+                  alt="유튜브 썸네일"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-[#232323] flex items-center justify-center text-gray-500 text-base sm:text-lg">
+                  대표 이미지 없음
+                </div>
+              )}
+              {/* 유튜브 바로가기 버튼은 유지 */}
+              {recipe.videoUrl && isValidYouTubeUrl(recipe.videoUrl) && (
+                <a
+                  href={recipe.videoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 bg-red-600 text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-2 shadow-lg hover:bg-red-700 transition-colors text-xs sm:text-sm font-bold"
+                >
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M10 15l5.19-3L10 9v6zm12-3c0-5.52-4.48-10-10-10S2 6.48 2 12s4.48 10 10 10 10-4.48 10-10zm-2 0c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8 8 3.58 8 8z" />
+                  </svg>
+                  유튜브에서 보기
+                </a>
+              )}
+            </div>
+            {/* 레시피 설명 토글 - 여백 더 축소 */}
+            {recipe.description && (
+              <div className="p-1 sm:p-4 border-t border-[#232323]">
+                <button
+                  className="flex items-center gap-1 text-orange-400 text-xs sm:text-xs font-semibold focus:outline-none hover:underline"
+                  onClick={() => setShowDescription(prev => !prev)}
+                  aria-expanded={showDescription}
+                  aria-controls="recipe-desc"
+                >
+                  {showDescription ? '설명 닫기' : '설명 보기'}
+                  <svg className={`w-4 h-4 transition-transform ${showDescription ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showDescription && (
+                  <p id="recipe-desc" className="text-gray-400 text-xs sm:text-sm mt-0.5 leading-relaxed animate-fadeIn">{recipe.description}</p>
+                )}
               </div>
             )}
           </div>
+
+          {/* 레시피 정보 카드(상단 네비+제목+버튼+채널+설명) */}
+          {/* (불필요한 레시피 정보 카드 전체 삭제) */}
+
+          {/* 일반 모드(재료, 조리단계, 관련 레시피 등)는 editMode가 아닐 때만 렌더링 */}
+          {!editMode && (
+            <>
+              {/* 필요한 재료 - 한 줄 리스트형, 구분선, 심플 구매 버튼, 가독성 강조 */}
+              <div className="mt-4 sm:mt-8">
+                <h2 className="text-base sm:text-xl font-bold text-white mb-2 sm:mb-4 flex items-center gap-1 sm:gap-2">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  필요한 재료
+                </h2>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                  {displayIngredients.map((ingredient) => (
+                    // 카드 전체를 Link로 감싸 재료 상세로 이동
+                    <Link
+                      key={ingredient.ingredient_id}
+                      href={`/ingredient/${ingredient.ingredient_id}`}
+                      className="block"
+                      tabIndex={0}
+                    >
+                      {/* 재료카드 내부 버튼 그룹 구조 개선 - 오른쪽 padding, 버튼 위치 조정 */}
+                      <div className="bg-[#232323] rounded-xl px-3 py-2 mb-2 flex items-center relative pr-14 overflow-hidden">
+                        {/* 재료명, 수량 */}
+                        <span className="font-semibold text-white truncate max-w-[60px] ml-1 text-xs">{ingredient.name}</span>
+                        <span className="ml-1 text-gray-400 text-xs truncate">{ingredient.amount} {ingredient.unit}</span>
+                        {/* 버튼 그룹 - 오른쪽 끝에 고정, 위치 조정 */}
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 items-center">
+                          {/* 장바구니 버튼 - 하트 왼쪽 */}
+                          {ingredient.shopUrl && (
+                            <a
+                              href={ingredient.shopUrl?.startsWith('http') ? ingredient.shopUrl : `https://${ingredient.shopUrl}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-center p-0.5 border border-orange-400 text-orange-500 rounded-full hover:bg-orange-50 transition"
+                              aria-label="구매링크"
+                              style={{ lineHeight: '1.2' }}
+                              onClick={e => e.stopPropagation()}
+                              tabIndex={-1}
+                            >
+                              {/* 장바구니 아이콘 */}
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path d="M3 3h2l.4 2M7 13h10l4-8H5.4" strokeLinecap="round" strokeLinejoin="round"/>
+                                <circle cx="9" cy="21" r="1" />
+                                <circle cx="20" cy="21" r="1" />
+                              </svg>
+                            </a>
+                          )}
+                          {/* 즐겨찾기 버튼 - 항상 맨 오른쪽 */}
+                          <button
+                            onClick={async e => {
+                              e.preventDefault(); e.stopPropagation();
+                              if (ingredient.ingredient_id) {
+                                // 1. DB에서 현재 즐겨찾기 상태 조회 및 토글
+                                const { data } = await supabase
+                                  .from('ingredients_master')
+                                  .select('is_favorite')
+                                  .eq('id', ingredient.ingredient_id)
+                                  .single();
+                                const newVal = !data?.is_favorite;
+                                await supabase
+                                  .from('ingredients_master')
+                                  .update({ is_favorite: newVal ? 'true' : 'false' })
+                                  .eq('id', ingredient.ingredient_id);
+                                triggerIngredientSync();
+                                // 2. 로컬 상태도 즉시 반영 (하트 색상 즉시 변경)
+                                setRecipe(prev => prev ? {
+                                  ...prev,
+                                  ingredients: prev.ingredients.map(ing =>
+                                    ing.ingredient_id === ingredient.ingredient_id
+                                      ? { ...ing, is_favorite: newVal }
+                                      : ing
+                                  )
+                                } : prev);
+                              }
+                            }}
+                            className="text-lg focus:outline-none text-gray-400 hover:text-orange-400"
+                            aria-label="즐겨찾기"
+                            tabIndex={-1}
+                          >
+                            <svg className="w-3 h-3" fill={ingredient.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+
+              {/* 조리 단계 - 아래로 이동 (상세화면에서 중요 체크박스 UI 추가) */}
+              <div className="mt-4 sm:mt-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <h2 className="text-base sm:text-xl font-bold text-white flex items-center gap-1 sm:gap-2 mb-0">
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    조리 단계
+                  </h2>
+                  {/* 커스텀 체크박스: 체크 시 주황, 해제 시 회색, 테두리/배경 없음 */}
+                  <label className={`flex items-center gap-1 ml-auto text-xs font-semibold cursor-pointer select-none transition-colors ${showImportantOnly ? 'text-orange-400' : 'text-gray-400'}`}
+                    aria-checked={showImportantOnly}
+                    tabIndex={0}
+                    role="checkbox"
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setShowImportantOnly(v => !v); }}
+                  >
+                    {/* 실제 체크박스는 숨김 */}
+                    <input
+                      type="checkbox"
+                      checked={showImportantOnly}
+                      onChange={e => setShowImportantOnly(e.target.checked)}
+                      className="hidden"
+                      tabIndex={-1}
+                    />
+                    {/* 체크 표시(v)만 심플하게 */}
+                    <span className="text-lg align-middle select-none" aria-hidden="true">
+                      {showImportantOnly ? '✔' : '✔'}
+                    </span>
+                    중요 조리단계만 보기
+                  </label>
+                </div>
+                <div className="space-y-1 sm:space-y-2">
+                  {(showImportantOnly ? recipe.steps.filter(step => step.isImportant) : recipe.steps).map((step, i) => (
+                    <div
+                      key={`${step.description}-${i}`}
+                      className={`border border-[#2a2a2a] rounded-lg sm:rounded-2xl p-2 sm:p-3 shadow-lg hover:border-[#3a3a3a] transition-all duration-200 flex items-center ${step.isImportant ? 'bg-orange-500/20' : 'bg-[#1a1a1a]'}`}
+                    >
+                      <div className="flex items-start gap-2 sm:gap-3 flex-1">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center text-white font-bold text-base sm:text-lg shadow-lg flex-shrink-0">
+                          {i + 1}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm sm:text-base text-white leading-relaxed mb-0.5 sm:mb-1">{step.description}</p>
+                        </div>
+                      </div>
+                      {/* 중요 체크박스 - 상세화면에서 바로 토글 */}
+                      <button
+                        onClick={async () => {
+                          const newSteps = [...recipe.steps];
+                          newSteps[i] = { ...newSteps[i], isImportant: !newSteps[i].isImportant };
+                          setRecipe({ ...recipe, steps: newSteps });
+                          await supabase
+                            .from('recipes')
+                            .update({ steps: newSteps })
+                            .eq('id', recipe.id);
+                        }}
+                        className={`ml-3 transition-all duration-200 ${
+                          step.isImportant 
+                            ? 'text-orange-400' 
+                            : 'text-gray-400 hover:text-gray-300'
+                        }`}
+                        aria-label="중요 단계 표시"
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 관련 레시피 */}
+              <div className="mt-6 sm:mt-10">
+                <h2 className="text-base sm:text-xl font-bold text-white mb-2 sm:mb-4 flex items-center gap-1 sm:gap-2">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
+                  관련 레시피
+                </h2>
+                {related.length === 0 ? (
+                  <div className="bg-black border border-[#232323] rounded-lg sm:rounded-2xl p-3 sm:p-6 text-gray-500 text-center">관련 레시피가 없습니다</div>
+                ) : (
+                  <div className="flex flex-col gap-2 sm:gap-4">
+                    {related.map((rel: any) => (
+                      <Link key={rel.id} href={`/recipe/${rel.id}`} passHref legacyBehavior>
+                        <a style={{ display: 'block' }}>
+                          <div className="bg-black border border-[#232323] rounded-lg sm:rounded-2xl p-3 sm:p-5 hover:border-orange-400 transition cursor-pointer">
+                            <div className="text-white font-bold text-base sm:text-lg mb-1 sm:mb-2">{rel.title}</div>
+                            <div className="mb-1 sm:mb-2">
+                              <div className="flex flex-wrap gap-1 sm:gap-2">
+                                {rel._commonNames.map((name: string, idx: number) => (
+                                  <span key={name + idx} className="bg-orange-500 text-white text-xs px-2 py-1 rounded-full font-bold">{name}</span>
+                                ))}
+                                {rel.ingredients.filter((ing: any) => !rel._commonNames.includes(ing.name)).map((ing: any) => (
+                                  <span key={ing.ingredient_id} className="bg-[#232323] text-gray-400 text-xs px-2 py-1 rounded-full border border-[#3a3a3a]">{ing.name}</span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </a>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+          {/* 페이지 하단 flow에 맞춰 수정/삭제 버튼을 한 줄에 배치 */}
+          {/* 1. 레시피 수정/삭제 버튼 크기 및 텍스트 축소 */}
+          {!editMode && (
+            <div className="flex gap-2 mt-8 mb-8">
+              {/* 레시피 수정 버튼 */}
+              <button
+                className="flex-1 py-2 rounded-lg bg-[#232323] border text-orange-400 border-orange-400 font-bold text-xs shadow transition-all duration-200 focus:outline-none hover:border-orange-500 hover:text-orange-500"
+                onClick={() => setEditMode(true)}
+                aria-label="레시피 수정"
+              >
+                레시피 수정
+              </button>
+              {/* 레시피 삭제 버튼 */}
+              <button
+                className="flex-1 py-2 rounded-lg bg-[#232323] border text-red-500 border-red-500 font-bold text-xs shadow transition-all duration-200 focus:outline-none hover:border-red-600 hover:text-red-600"
+                onClick={handleDelete}
+                aria-label="레시피 삭제"
+              >
+                레시피 삭제
+              </button>
+            </div>
+          )}
         </>
-      )}
-      {/* 페이지 하단 flow에 맞춰 수정/삭제 버튼을 한 줄에 배치 */}
-      {/* 1. 레시피 수정/삭제 버튼 크기 및 텍스트 축소 */}
-      {!editMode && (
-        <div className="flex gap-2 mt-8 mb-8">
-          {/* 레시피 수정 버튼 */}
-          <button
-            className="flex-1 py-2 rounded-lg bg-[#232323] border text-orange-400 border-orange-400 font-bold text-xs shadow transition-all duration-200 focus:outline-none hover:border-orange-500 hover:text-orange-500"
-            onClick={() => setEditMode(true)}
-            aria-label="레시피 수정"
-          >
-            레시피 수정
-          </button>
-          {/* 레시피 삭제 버튼 */}
-          <button
-            className="flex-1 py-2 rounded-lg bg-[#232323] border text-red-500 border-red-500 font-bold text-xs shadow transition-all duration-200 focus:outline-none hover:border-red-600 hover:text-red-600"
-            onClick={handleDelete}
-            aria-label="레시피 삭제"
-          >
-            레시피 삭제
-          </button>
-        </div>
       )}
       <BottomNavigation
         activeTab="recipebook"

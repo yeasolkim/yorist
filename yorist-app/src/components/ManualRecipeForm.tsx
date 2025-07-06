@@ -70,7 +70,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
             name: ingredientName.trim(),
             unit: ingredientUnit.trim() || '개',
             shop_url: ingredientShopUrl.trim() || null,
-            is_favorite: false
+            is_favorite: 'false'
           })
           .select('id')
           .single();
@@ -248,35 +248,84 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
     setSteps(prev => prev.map((step, i) => i === idx ? { ...step, description: value } : step));
   };
 
-  // 폼 제출
-  const handleSubmit = (e: React.FormEvent) => {
+  // 폼 제출 (Supabase 연동)
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) {
-      alert('레시피 제목을 입력해주세요.');
-      return;
+    if (!title.trim()) { alert('레시피 제목을 입력해주세요.'); return; }
+    if (ingredients.length === 0) { alert('재료를 하나 이상 추가해주세요.'); return; }
+    if (steps.length === 0) { alert('조리 단계를 하나 이상 추가해주세요.'); return; }
+
+    // 1. 수정(UPDATE) 모드: id가 있으면 insert를 절대 실행하지 않음
+    if (initialRecipe?.id) {
+      const recipe: Recipe = {
+        id: initialRecipe.id,
+        title: title.trim(),
+        description: description.trim(),
+        ingredients,
+        steps: steps.map(s => ({ description: s.description, isImportant: s.isImportant })),
+        videoUrl: videoUrl.trim() || undefined,
+        channel: channel.trim() || undefined,
+        tags: initialRecipe?.tags || [],
+        isVegetarian: initialRecipe?.isVegetarian || false,
+        createdat: initialRecipe?.createdat || new Date(),
+        isfavorite: initialRecipe?.isfavorite || false
+      };
+      onSave(recipe);
+      return; // 반드시 return으로 아래 insert 코드 실행 방지!
     }
-    if (ingredients.length === 0) {
-      alert('재료를 하나 이상 추가해주세요.');
-      return;
+
+    // 2. 추가(INSERT) 모드: id가 없을 때만 insert 실행
+    try {
+      // DB 컬럼명과 타입에 맞게 변환
+      const supabaseRecipe = {
+        title: title.trim(),
+        description: description.trim(),
+        ingredients: ingredients.map(ing => ({
+          name: ing.name,
+          amount: ing.amount,
+          unit: ing.unit,
+          shopUrl: ing.shopUrl || "",
+          ingredient_id: ing.ingredient_id || ""
+        })),
+        steps: steps.map(step => ({
+          description: step.description,
+          isImportant: step.isImportant ?? false
+        })),
+        videourl: videoUrl.trim() || null,
+        createdat: initialRecipe?.createdat || new Date().toISOString(),
+        isfavorite: "false"
+      };
+
+      const { data: savedRecipe, error } = await supabase
+        .from('recipes')
+        .insert(supabaseRecipe)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('레시피 저장 실패:', error);
+        alert('레시피 저장에 실패했습니다. 다시 시도해주세요.');
+        return;
+      }
+
+      const recipe: Recipe = {
+        id: savedRecipe.id || generateId(),
+        title: title.trim(),
+        description: description.trim(),
+        ingredients,
+        steps: steps.map(s => ({ description: s.description, isImportant: s.isImportant })),
+        videoUrl: videoUrl.trim() || undefined,
+        channel: channel.trim() || undefined,
+        tags: initialRecipe?.tags || [],
+        isVegetarian: initialRecipe?.isVegetarian || false,
+        createdat: initialRecipe?.createdat || new Date(),
+        isfavorite: initialRecipe?.isfavorite || false
+      };
+      onSave(recipe);
+    } catch (error) {
+      console.error('레시피 저장 중 오류:', error);
+      alert('레시피 저장 중 오류가 발생했습니다.');
     }
-    if (steps.length === 0) {
-      alert('조리 단계를 하나 이상 추가해주세요.');
-      return;
-    }
-    const recipe: Recipe = {
-      id: initialRecipe?.id || generateId(),
-      title: title.trim(),
-      description: description.trim(),
-      ingredients,
-      steps: steps.map(s => ({ description: s.description })),
-      videoUrl: videoUrl.trim() || undefined,
-      channel: channel.trim() || undefined,
-      tags: initialRecipe?.tags || [],
-      isVegetarian: initialRecipe?.isVegetarian || false,
-      createdat: initialRecipe?.createdat || new Date(),
-      isfavorite: initialRecipe?.isfavorite || false
-    };
-    onSave(recipe);
   };
 
   // 자동완성 상태
@@ -572,15 +621,12 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
           >
             취소
           </button>
-          {/*
           <button
             type="submit"
-            className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-3 font-medium transition-colors"
+            className="flex-1 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white rounded-xl py-3 font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
           >
             저장
           </button>
-          */}
-          {/* 저장 버튼은 모든 변경이 실시간 반영되므로 제거함 */}
         </div>
       </form>
     </div>
