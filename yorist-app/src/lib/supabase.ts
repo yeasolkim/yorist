@@ -48,6 +48,16 @@ export const convertFromSupabaseRecipe = (recipe: SupabaseRecipe): Recipe => ({
   isfavorite: recipe.isfavorite ?? false
 });
 
+// RecipeIngredient[] → DB 저장용 변환 (snake_case)
+export const toDbIngredients = (ingredients: RecipeIngredient[]) =>
+  ingredients.map(ing => ({
+    ingredient_id: ing.ingredient_id,
+    name: ing.name,
+    amount: ing.amount,
+    unit: ing.unit,
+    shop_url: ing.shopUrl || null // snake_case로 변환
+  }));
+
 // 레시피 관련 데이터베이스 함수들
 export const recipeService = {
   // 모든 레시피 조회

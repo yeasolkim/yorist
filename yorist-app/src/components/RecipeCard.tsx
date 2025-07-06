@@ -29,34 +29,33 @@ export default function RecipeCard({
 
   return (
     <div 
-      className="card bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl p-5 cursor-pointer hover:border-[#3a3a3a] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 ease-out animate-fadeIn active:scale-95" 
+      className="card bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl sm:rounded-2xl p-3 sm:p-5 cursor-pointer hover:border-[#3a3a3a] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 ease-out animate-fadeIn active:scale-95" 
       onClick={onClick}
     >
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-2 sm:mb-4">
         {/* 썸네일 */}
         {thumbnailUrl && (
-          <div className="flex-shrink-0 mr-3">
+          <div className="flex-shrink-0 mr-2 sm:mr-3">
             <img
               src={thumbnailUrl}
               alt="유튜브 썸네일"
-              className="w-20 h-20 object-cover rounded-xl border border-[#333] shadow-sm"
-              style={{ minWidth: 80, minHeight: 80 }}
+              className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg sm:rounded-xl border border-[#333] shadow-sm"
+              style={{ minWidth: 64, minHeight: 64 }}
             />
           </div>
         )}
-        <div className="flex-1 min-w-0 pr-3">
-          <h3 className="text-white text-lg font-bold mb-2 line-clamp-2 leading-tight">
+        <div className="flex-1 min-w-0 pr-2 sm:pr-3">
+          <h3 className="text-white text-base sm:text-lg font-bold mb-1 sm:mb-2 line-clamp-2 leading-tight">
             {recipe.title}
           </h3>
-          <p className="text-gray-400 text-sm line-clamp-2 leading-relaxed">
+          <p className="text-gray-400 text-xs sm:text-sm line-clamp-2 leading-relaxed">
             {recipe.description}
           </p>
         </div>
-        
         {/* 즐겨찾기 버튼 */}
         {showFavorite && (
           <button
-            className={`flex-shrink-0 p-2.5 rounded-full transition-all duration-200 ease-out min-h-[44px] min-w-[44px] ${
+            className={`flex-shrink-0 p-2 rounded-full transition-all duration-200 ease-out min-h-[36px] min-w-[36px] sm:min-h-[44px] sm:min-w-[44px] ${
               isFavorite 
                 ? 'bg-orange-500/20 text-orange-400 shadow-lg' 
                 : 'bg-[#2a2a2a] text-gray-400 hover:bg-[#3a3a3a]'
@@ -68,7 +67,7 @@ export default function RecipeCard({
             }}
           >
             <svg
-              className={`w-5 h-5 ${isFavorite ? 'scale-110' : ''} transition-transform duration-200`}
+              className={`w-4 h-4 sm:w-5 sm:h-5 ${isFavorite ? 'scale-110' : ''} transition-transform duration-200`}
               fill={isFavorite ? 'currentColor' : 'none'}
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -83,20 +82,19 @@ export default function RecipeCard({
           </button>
         )}
       </div>
-      
       {/* 재료 목록 */}
-      <div className="mb-4">
-        <div className="flex flex-wrap gap-2">
+      <div className="mb-2 sm:mb-4">
+        <div className="flex flex-wrap gap-1 sm:gap-2">
           {displayIngredients.map((ingredient, index) => (
             <span 
               key={index} 
-              className="inline-flex items-center gap-1.5 bg-[#2a2a2a] text-white text-xs px-3 py-2 rounded-full border border-[#3a3a3a] hover:border-[#4a4a4a] transition-colors duration-200"
+              className="inline-flex items-center gap-1 bg-[#2a2a2a] text-white text-[11px] sm:text-xs px-2 sm:px-3 py-1 sm:py-2 rounded-full border border-[#3a3a3a] hover:border-[#4a4a4a] transition-colors duration-200"
             >
               <span className="font-medium">{ingredient.name}</span>
             </span>
           ))}
           {recipe.ingredients.length > 3 && (
-            <span className="text-gray-500 text-xs px-3 py-2 bg-[#2a2a2a] rounded-full border border-[#3a3a3a]">
+            <span className="text-gray-500 text-[11px] sm:text-xs px-2 sm:px-3 py-1 sm:py-2 bg-[#2a2a2a] rounded-full border border-[#3a3a3a]">
               +{recipe.ingredients.length - 3}개 더
             </span>
           )}

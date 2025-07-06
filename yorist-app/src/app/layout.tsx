@@ -10,19 +10,13 @@ export const metadata: Metadata = {
   themeColor: '#ef4444',
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+// app 디렉토리 표준 레이아웃: <html>과 <body> 포함
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
-      <body className="min-h-screen bg-black">
-        {/* 메인 콘텐츠 영역 */}
-        <main className="pb-20">
-          {children}
-        </main>
+      <body>
+        {children}
       </body>
     </html>
-  )
+  );
 } 

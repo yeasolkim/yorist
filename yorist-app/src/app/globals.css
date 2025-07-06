@@ -56,6 +56,20 @@
   --radius-full: 9999px;
 }
 
+/* 모바일 환경 최적화: 오버플로우, 터치, 스크롤 등 */
+html, body, #__next, #root {
+  width: 100vw;
+  min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  touch-action: manipulation;
+  -webkit-overflow-scrolling: touch;
+}
+body {
+  position: relative;
+  background: #000;
+}
 * {
   box-sizing: border-box;
   padding: 0;

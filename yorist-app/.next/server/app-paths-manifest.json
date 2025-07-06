@@ -1,8 +1,5 @@
 {
-  "/_not-found": "app/_not-found.js",
-  "/api/generate-recipe/route": "app/api/generate-recipe/route.js",
   "/page": "app/page.js",
   "/recipe/[id]/page": "app/recipe/[id]/page.js",
-  "/recipe/add/page": "app/recipe/add/page.js",
-  "/api/youtube-transcript/route": "app/api/youtube-transcript/route.js"
+  "/ingredient/[id]/page": "app/ingredient/[id]/page.js"
 }

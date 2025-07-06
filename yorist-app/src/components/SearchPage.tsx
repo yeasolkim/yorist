@@ -5,6 +5,9 @@ import { Recipe } from '@/lib/types';
 import { recipeService } from '@/lib/supabase';
 import RecipeCard from './RecipeCard';
 import { createClient } from '@supabase/supabase-js';
+import Link from 'next/link';
+import { useRecipeSync, triggerRecipeSync } from '@/lib/recipeSync';
+import { useIngredientSync, triggerIngredientSync } from '@/lib/ingredientSync';
 
 interface SearchPageProps {
   onRecipeClick?: (recipe: Recipe) => void;
@@ -24,11 +27,15 @@ export default function SearchPage({
   const [ingredientResults, setIngredientResults] = useState<any[]>([]);
 
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  const syncVersion = useRecipeSync();
+  const ingredientSyncVersion = useIngredientSync();
 
+  // 검색어/동기화 버전이 바뀔 때마다 레시피/재료 refetch
   useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredRecipes([]);
       setKeywordSuggestions([]);
+      setIngredientResults([]);
       return;
     }
     setLoading(true);
@@ -52,21 +59,14 @@ export default function SearchPage({
         setKeywordSuggestions([]);
       })
       .finally(() => setLoading(false));
-  }, [searchQuery]);
-
-  // 검색어 입력 시 식재료도 검색
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setIngredientResults([]);
-      return;
-    }
+    // 재료도 동기화
     supabase
       .from('ingredients_master')
       .select('id, name, shop_url, is_favorite')
       .ilike('name', `%${searchQuery}%`)
       .limit(10)
       .then(({ data }) => setIngredientResults(data || []));
-  }, [searchQuery]);
+  }, [searchQuery, syncVersion, ingredientSyncVersion]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -74,6 +74,7 @@ export default function SearchPage({
 
   // 하트 토글 함수 (DB update + optimistic UI)
   const toggleFavoriteIngredient = async (item: any) => {
+    if (!item.id) return; // id 유효성 체크
     const newVal = !item.is_favorite;
     // optimistic update
     setIngredientResults(results =>
@@ -83,6 +84,15 @@ export default function SearchPage({
       .from('ingredients_master')
       .update({ is_favorite: newVal })
       .eq('id', item.id);
+    // 최신 정보 refetch
+    const { data } = await supabase
+      .from('ingredients_master')
+      .select('is_favorite, shop_url')
+      .eq('id', item.id)
+      .single();
+    setIngredientResults(results =>
+      results.map(i => i.id === item.id ? { ...i, is_favorite: data?.is_favorite, shop_url: data?.shop_url } : i)
+    );
   };
 
   return (
@@ -146,31 +156,54 @@ export default function SearchPage({
       {searchQuery.trim() && ingredientResults.length > 0 && (
         <div className="mt-8">
           <h2 className="text-lg font-bold text-white mb-3">식재료 검색 결과</h2>
-          <ul className="space-y-3">
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1">
             {ingredientResults.map(item => (
-              <li key={item.id} className="flex items-center justify-between bg-[#232323] rounded-xl px-4 py-3">
-                <span className="text-white font-medium">{item.name}</span>
-                <div className="flex items-center gap-3">
-                  {item.shop_url && (
-                    <a href={item.shop_url} target="_blank" rel="noopener noreferrer" className="text-orange-400 underline text-sm">구매</a>
-                  )}
-                  <button
-                    onClick={() => toggleFavoriteIngredient(item)}
-                    className={`text-lg ${item.is_favorite ? 'text-orange-400' : 'text-gray-400'}`}
-                    aria-label="즐겨찾기"
-                  >
-                    {item.is_favorite ? '♥' : '♡'}
-                  </button>
+              <div key={item.id} className="block" onClick={() => window.location.href = `/ingredient/${item.id}` } tabIndex={0} role="button">
+                <div className="bg-[#232323] rounded-xl p-3 hover:border hover:border-orange-400 transition cursor-pointer h-14 flex items-center justify-between">
+                  {/* 재료명 */}
+                  <span className="text-white font-medium text-sm truncate">{item.name}</span>
+                  <div className="flex items-center gap-1">
+                    {item.shop_url && (
+                      <a 
+                        href={item.shop_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="flex items-center justify-center p-0.5 border border-orange-400 text-orange-500 rounded-full hover:bg-orange-50 transition"
+                        aria-label="구매링크"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path d="M3 3h2l.4 2M7 13h10l4-8H5.4" strokeLinecap="round" strokeLinejoin="round"/>
+                          <circle cx="9" cy="21" r="1" />
+                          <circle cx="20" cy="21" r="1" />
+                        </svg>
+                      </a>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        toggleFavoriteIngredient(item); 
+                        triggerRecipeSync(); 
+                        triggerIngredientSync();
+                      }}
+                      className={`text-lg ${item.is_favorite ? 'text-orange-400' : 'text-gray-400'} hover:text-orange-300 transition`}
+                      aria-label="즐겨찾기"
+                    >
+                      <svg className="w-3 h-3" fill={item.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
       {/* 검색 결과 */}
       {searchQuery.trim() && (
-        <div>
+        <div className="mt-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-white">레시피 검색 결과</h2>
             <span className="text-gray-400 text-sm">{filteredRecipes.length}개의 레시피</span>

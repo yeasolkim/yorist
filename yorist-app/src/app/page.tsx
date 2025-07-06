@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Recipe, NavigationTab, RecipeIngredient } from '@/lib/types';
 import { getRecipesAsync, saveRecipeAsync } from '@/lib/recipeUtils';
 import RecipeSection from '@/components/RecipeSection';
@@ -16,6 +17,7 @@ import { recipeService } from '@/lib/supabase';
 
 export default function HomePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   
   // 상태 관리
   const [activeTab, setActiveTab] = useState<NavigationTab>('home');
@@ -43,6 +45,14 @@ export default function HomePage() {
     };
     fetchRecipes();
   }, [activeTab]);
+
+  // 쿼리 파라미터(tab)로 진입 시 해당 탭 자동 활성화
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'recipebook' || tabParam === 'search' || tabParam === 'favorites' || tabParam === 'home') {
+      setActiveTab(tabParam as NavigationTab);
+    }
+  }, [searchParams]);
 
   // 즐겨찾기 토글 (Supabase 연동)
   const handleFavoriteToggle = async (recipeId: string, currentFavorite: boolean) => {
@@ -242,7 +252,7 @@ export default function HomePage() {
           <span className="text-white text-lg">로딩 중...</span>
         </div>
       ) : (
-        <main className="px-4 pt-4 sm:pt-6 max-w-md mx-auto">
+        <main className="px-4 pt-4 sm:pt-6 max-w-md mx-auto pb-16 sm:pb-24"> {/* 하단 네비게이션 바 높이만큼 padding-bottom 추가 */}
           {/* 홈 탭에서만 유튜브 입력/NotebookLM 프롬프트 UI 렌더링 */}
           {activeTab === 'home' && (
             <>

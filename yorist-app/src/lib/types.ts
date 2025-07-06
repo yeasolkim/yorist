@@ -6,6 +6,7 @@ export interface RecipeIngredient {
   amount: string;
   unit: string;
   shopUrl?: string;
+  is_favorite?: boolean; // 즐겨찾기 여부 (DB 연동)
 }
 
 export interface Recipe {
@@ -41,9 +42,10 @@ export interface Ingredient {
   shopUrl?: string; // 쇼핑몰 구매 링크
 }
 
-// 조리 단계 타입 정의 (description만)
+// 조리 단계 타입에 중요 여부 필드 추가
 export interface RecipeStep {
   description: string;
+  isImportant?: boolean; // 중요 단계 여부
 }
 
 // 네비게이션 탭 타입 정의 (홈, 레시피북, 검색, 즐겨찾기)

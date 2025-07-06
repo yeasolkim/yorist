@@ -79,19 +79,34 @@ export default function AddRecipePage() {
   }, [newIngredient.name]);
 
   // 재료 추가 핸들러에서 RecipeIngredient 타입으로 저장
-  const handleAddIngredient = () => {
-    if (newIngredient.name && newIngredient.amount) {
-      const ingredient: RecipeIngredient = {
-        ingredient_id: Date.now().toString(),
-        name: newIngredient.name,
-        amount: newIngredient.amount,
-        unit: newIngredient.unit,
-        shopUrl: newIngredient.shopUrl
-      };
-      
-      setIngredients([...ingredients, ingredient]);
-      setNewIngredient({ ingredient_id: '', name: '', amount: '', unit: '', shopUrl: '' });
+  const handleAddIngredient = async () => {
+    if (!newIngredient.name.trim()) return;
+    // ingredients_master에 이미 있는 재료인지 확인
+    const { data: existing } = await supabase
+      .from('ingredients_master')
+      .select('id')
+      .eq('name', newIngredient.name)
+      .single();
+    if (existing) {
+      // 이미 있으면 shop_url만 update
+      await supabase
+        .from('ingredients_master')
+        .update({ shop_url: newIngredient.shopUrl })
+        .eq('id', existing.id);
+    } else {
+      // 없으면 새로 insert
+      const { data: inserted } = await supabase
+        .from('ingredients_master')
+        .insert({ name: newIngredient.name, unit: newIngredient.unit, shop_url: newIngredient.shopUrl })
+        .select()
+        .single();
+      if (inserted) {
+        setNewIngredient({ ...newIngredient, ingredient_id: inserted.id });
+      }
     }
+    // 기존 로컬 재료 목록에 추가
+    setIngredients([...ingredients, newIngredient]);
+    setNewIngredient({ ingredient_id: '', name: '', amount: '', unit: '', shopUrl: '' });
   };
 
   // 재료 삭제 핸들러
@@ -140,6 +155,29 @@ export default function AddRecipePage() {
     router.push('/');
   };
 
+  // 레시피 저장/수정 시에도 재료의 shopUrl이 변경되면 ingredients_master update
+  const handleSaveRecipe = async (recipe: Recipe) => {
+    // 재료별로 shopUrl이 변경된 경우 update
+    for (const ing of recipe.ingredients) {
+      if (ing.ingredient_id && ing.shopUrl) {
+        await supabase
+          .from('ingredients_master')
+          .update({ shop_url: ing.shopUrl })
+          .eq('id', ing.ingredient_id);
+      }
+    }
+    // 기존 저장 로직 실행
+    // setLoading(true); // 이 부분은 현재 코드에서는 사용되지 않으므로 제거
+    // const success = await saveRecipeAsync(recipe);
+    // if (success) {
+    //   const recipes = await getRecipesAsync();
+    //   setSavedRecipes(recipes);
+    //   setFavorites(new Set(recipes.filter(r => r.isfavorite).map(r => r.id)));
+    //   setActiveTab('home');
+    // }
+    // setLoading(false);
+  };
+
   return (
     <div className="min-h-screen bg-black pb-20">
       {/* 상단 헤더 */}
@@ -162,57 +200,57 @@ export default function AddRecipePage() {
       </header>
 
       {/* 메인 폼 */}
-      <main className="p-4 space-y-6 max-w-md mx-auto">
-        <form onSubmit={handleSubmit} className="space-y-6">
+      <main className="p-2 sm:p-4 space-y-4 sm:space-y-6 max-w-md mx-auto overflow-x-hidden overscroll-none" style={{ maxWidth: '100vw', overscrollBehavior: 'none' }}>
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {/* 기본 정보 */}
-          <section className="bg-[#181818] rounded-2xl p-5 space-y-4 shadow-lg border border-[#232323]">
-            <h2 className="text-lg font-bold text-white mb-2">기본 정보</h2>
+          <section className="bg-[#181818] rounded-lg sm:rounded-2xl p-3 sm:p-5 space-y-3 sm:space-y-4 shadow-lg border border-[#232323]">
+            <h2 className="text-base sm:text-lg font-bold text-white mb-1 sm:mb-2">기본 정보</h2>
             {/* 레시피 제목 */}
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">
                 레시피 제목 <span className="text-orange-400">*</span>
               </label>
               <input
                 type="text"
                 value={formData.title}
                 onChange={(e) => setFormData({...formData, title: e.target.value})}
-                className="w-full px-4 py-3 bg-[#232323] border border-[#333] text-white rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition"
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-[#232323] border border-[#333] text-white rounded-lg sm:rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition text-sm sm:text-base"
                 placeholder="예: 김치찌개"
                 required
               />
             </div>
             {/* 레시피 설명 */}
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">
                 레시피 설명
               </label>
               <textarea
                 value={formData.description}
                 onChange={(e) => setFormData({...formData, description: e.target.value})}
-                className="w-full px-4 py-3 bg-[#232323] border border-[#333] text-white rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition"
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-[#232323] border border-[#333] text-white rounded-lg sm:rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition text-sm sm:text-base"
                 placeholder="레시피에 대한 간단한 설명을 입력하세요"
                 rows={3}
               />
             </div>
             {/* 유튜브 링크 */}
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">
                 유튜브 링크
               </label>
               <input
                 type="url"
                 value={formData.videoUrl}
                 onChange={(e) => setFormData({...formData, videoUrl: e.target.value})}
-                className="w-full px-4 py-3 bg-[#232323] border border-[#333] text-white rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition"
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-[#232323] border border-[#333] text-white rounded-lg sm:rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition text-sm sm:text-base"
                 placeholder="https://www.youtube.com/watch?v=..."
               />
               {/* 유튜브 미리보기 */}
               {formData.videoUrl && getYouTubeEmbedUrl(formData.videoUrl) && (
-                <div className="mt-3">
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                <div className="mt-2 sm:mt-3">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">
                     미리보기
                   </label>
-                  <div className="relative w-full h-48 bg-[#232323] rounded-xl overflow-hidden">
+                  <div className="relative w-full h-32 sm:h-48 bg-[#232323] rounded-lg sm:rounded-xl overflow-hidden">
                     <iframe
                       src={getYouTubeEmbedUrl(formData.videoUrl)}
                       className="w-full h-full"
@@ -225,18 +263,17 @@ export default function AddRecipePage() {
               )}
             </div>
           </section>
-
           {/* 재료 섹션 */}
-          <section className="bg-[#181818] rounded-2xl p-5 space-y-4 shadow-lg border border-[#232323]">
-            <h2 className="text-lg font-bold text-white mb-2">재료</h2>
+          <section className="bg-[#181818] rounded-lg sm:rounded-2xl p-3 sm:p-5 space-y-3 sm:space-y-4 shadow-lg border border-[#232323]">
+            <h2 className="text-base sm:text-lg font-bold text-white mb-1 sm:mb-2">재료</h2>
             {/* 재료 추가 폼 */}
-            <div className="grid grid-cols-2 gap-2 relative">
+            <div className="grid grid-cols-2 gap-1 sm:gap-2 relative">
               <div className="col-span-1">
                 <input
                   type="text"
                   value={newIngredient.name}
                   onChange={e => setNewIngredient({ ...newIngredient, name: e.target.value })}
-                  className="px-4 py-3 bg-[#232323] border border-[#333] text-white rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition w-full"
+                  className="px-3 sm:px-4 py-2 sm:py-3 bg-[#232323] border border-[#333] text-white rounded-lg sm:rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition w-full text-sm sm:text-base"
                   placeholder="재료명"
                   autoComplete="off"
                   onFocus={() => newIngredient.name.length >= 2 && setShowDropdown(true)}
@@ -244,18 +281,18 @@ export default function AddRecipePage() {
                 />
                 {/* 자동완성 드롭다운 */}
                 {showDropdown && ingredientCandidates.length > 0 && (
-                  <ul className="absolute z-10 left-0 right-0 mt-1 bg-[#232323] border border-[#333] rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                  <ul className="absolute z-10 left-0 right-0 mt-1 bg-[#232323] border border-[#333] rounded-lg sm:rounded-xl shadow-lg max-h-48 overflow-y-auto">
                     {ingredientCandidates.map(item => (
                       <li
                         key={item.id}
-                        className="px-4 py-2 text-white hover:bg-orange-500/20 cursor-pointer flex items-center justify-between"
+                        className="px-3 sm:px-4 py-2 text-white hover:bg-orange-500/20 cursor-pointer flex items-center justify-between text-sm sm:text-base"
                         onMouseDown={() => {
                           setNewIngredient({
                             ingredient_id: item.id,
                             name: item.name,
                             amount: '',
                             unit: item.unit || '',
-                            shopUrl: item.shop_url || ''
+                            shopUrl: item.shop_url || '' // 구매링크 자동입력
                           });
                           setShowDropdown(false);
                         }}
@@ -273,14 +310,14 @@ export default function AddRecipePage() {
                 type="text"
                 value={newIngredient.amount}
                 onChange={e => setNewIngredient({ ...newIngredient, amount: e.target.value })}
-                className="px-4 py-3 bg-[#232323] border border-[#333] text-white rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition w-full"
+                className="px-3 sm:px-4 py-2 sm:py-3 bg-[#232323] border border-[#333] text-white rounded-lg sm:rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition w-full text-sm sm:text-base"
                 placeholder="양"
               />
               <input
                 type="text"
                 value={newIngredient.unit}
                 onChange={e => setNewIngredient({ ...newIngredient, unit: e.target.value })}
-                className="px-4 py-3 bg-[#232323] border border-[#333] text-white rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition w-full col-span-2"
+                className="px-3 sm:px-4 py-2 sm:py-3 bg-[#232323] border border-[#333] text-white rounded-lg sm:rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition w-full col-span-2 text-sm sm:text-base"
                 placeholder="단위 (g, 개, 큰술)"
               />
               {/* 구매링크 입력란 */}
@@ -288,24 +325,24 @@ export default function AddRecipePage() {
                 type="text"
                 value={newIngredient.shopUrl}
                 onChange={e => setNewIngredient({ ...newIngredient, shopUrl: e.target.value })}
-                className="px-4 py-3 bg-[#232323] border border-[#333] text-white rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition w-full col-span-2"
+                className="px-3 sm:px-4 py-2 sm:py-3 bg-[#232323] border border-[#333] text-white rounded-lg sm:rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition w-full col-span-2 text-sm sm:text-base"
                 placeholder="구매 링크 (선택)"
               />
             </div>
             <button
               type="button"
               onClick={handleAddIngredient}
-              className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-white font-bold rounded-xl px-4 py-3 mt-2 shadow hover:shadow-lg hover:-translate-y-0.5 transition-all"
+              className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-white font-bold rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 mt-1 sm:mt-2 shadow hover:shadow-lg hover:-translate-y-0.5 transition-all text-sm sm:text-base"
             >
               재료 추가
             </button>
             {/* 재료 목록 */}
-            <div className="space-y-2">
+            <div className="space-y-1 sm:space-y-2">
               {ingredients.map((ingredient, idx) => (
-                <div key={ingredient.ingredient_id || ingredient.name || idx} className="flex items-center justify-between p-3 bg-[#232323] rounded-xl">
+                <div key={ingredient.ingredient_id || ingredient.name || idx} className="flex items-center justify-between p-2 sm:p-3 bg-[#232323] rounded-lg sm:rounded-xl">
                   <div className="flex items-center space-x-2">
-                    <span className="font-medium text-white">{ingredient.name}</span>
-                    <span className="text-gray-400">{ingredient.amount} {ingredient.unit}</span>
+                    <span className="font-medium text-white text-xs sm:text-sm">{ingredient.name}</span>
+                    <span className="text-gray-400 text-xs sm:text-sm">{ingredient.amount} {ingredient.unit}</span>
                     {ingredient.shopUrl && (
                       <a href={ingredient.shopUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-orange-400 underline text-xs">구매</a>
                     )}
@@ -313,26 +350,23 @@ export default function AddRecipePage() {
                   <button
                     type="button"
                     onClick={() => handleRemoveIngredient(ingredient.ingredient_id || ingredient.name)}
-                    className="text-red-400 hover:text-red-600"
+                    className="text-red-400 hover:text-red-600 ml-2 text-xs sm:text-sm"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
+                    삭제
                   </button>
                 </div>
               ))}
             </div>
           </section>
-
           {/* 요리 단계 섹션 */}
-          <section className="bg-[#181818] rounded-2xl p-5 space-y-4 shadow-lg border border-[#232323]">
-            <h2 className="text-lg font-bold text-white mb-2">요리 단계</h2>
+          <section className="bg-[#181818] rounded-lg sm:rounded-2xl p-3 sm:p-5 space-y-3 sm:space-y-4 shadow-lg border border-[#232323]">
+            <h2 className="text-base sm:text-lg font-bold text-white mb-1 sm:mb-2">요리 단계</h2>
             {/* 단계 추가 폼 */}
-            <div className="space-y-2">
+            <div className="space-y-1 sm:space-y-2">
               <textarea
                 value={newStep.description}
                 onChange={(e) => setNewStep({...newStep, description: e.target.value})}
-                className="w-full px-4 py-3 bg-[#232323] border border-[#333] text-white rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition"
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-[#232323] border border-[#333] text-white rounded-lg sm:rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition text-sm sm:text-base"
                 placeholder="요리 단계를 설명하세요"
                 rows={3}
               />
@@ -340,25 +374,23 @@ export default function AddRecipePage() {
             <button
               type="button"
               onClick={handleAddStep}
-              className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-white font-bold rounded-xl px-4 py-3 mt-2 shadow hover:shadow-lg hover:-translate-y-0.5 transition-all"
+              className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-white font-bold rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 mt-1 sm:mt-2 shadow hover:shadow-lg hover:-translate-y-0.5 transition-all text-sm sm:text-base"
             >
               단계 추가
             </button>
             {/* 단계 목록 */}
-            <div className="space-y-2">
+            <div className="space-y-1 sm:space-y-2">
               {steps.map((step, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-[#232323] rounded-xl">
+                <div key={idx} className="flex items-center justify-between p-2 sm:p-3 bg-[#232323] rounded-lg sm:rounded-xl">
                   <div className="flex items-center space-x-2">
-                    <span className="text-white">{step.description}</span>
+                    <span className="text-white text-xs sm:text-sm">{step.description}</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => handleRemoveStep(idx)}
-                    className="text-red-400 hover:text-red-600 ml-2"
+                    className="text-red-400 hover:text-red-600 ml-2 text-xs sm:text-sm"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
+                    삭제
                   </button>
                 </div>
               ))}

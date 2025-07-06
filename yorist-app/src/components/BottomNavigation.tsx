@@ -55,8 +55,8 @@ export default function BottomNavigation({
   };
   
   return (
-    <nav className="fixed bottom-0 left-0 w-full z-50 bg-[#1a1a1a]/95 backdrop-blur-xl border-t border-[#2a2a2a] px-4 pb-4 pb-[env(safe-area-inset-bottom)]">
-      <div className="flex justify-around items-center h-16 max-w-md mx-auto">
+    <nav className="fixed bottom-0 left-0 w-full z-50 bg-[#1a1a1a]/95 backdrop-blur-xl border-t border-[#2a2a2a] px-2 sm:px-4 pb-2 sm:pb-4 pb-[env(safe-area-inset-bottom)]">
+      <div className="flex justify-around items-center h-12 sm:h-16 max-w-md mx-auto">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           
@@ -64,7 +64,7 @@ export default function BottomNavigation({
             <button
               key={tab.id}
               onClick={() => handleTabClick(tab.id)}
-              className={`flex flex-col items-center justify-center flex-1 h-full transition-all duration-300 ease-out relative group min-h-[44px] ${
+              className={`flex flex-col items-center justify-center flex-1 h-full transition-all duration-300 ease-out relative group min-h-[36px] sm:min-h-[44px] ${
                 isActive 
                   ? 'text-orange-400' 
                   : 'text-gray-400 hover:text-gray-300'
@@ -76,15 +76,15 @@ export default function BottomNavigation({
                 <div className="absolute inset-0 bg-orange-400/10 rounded-xl -m-1 animate-scaleIn" />
               )}
               
-              <div className="relative flex items-center justify-center mb-1">
+              <div className="relative flex items-center justify-center mb-0.5 sm:mb-1">
                 <div className={`transition-all duration-300 ease-out ${
-                  isActive ? 'scale-110' : 'group-hover:scale-105'
+                  isActive ? 'scale-105 sm:scale-110' : 'group-hover:scale-105'
                 }`}>
                   {tab.icon}
                 </div>
               </div>
               
-              <span className={`text-xs font-medium tracking-tight transition-all duration-300 ease-out ${
+              <span className={`text-[10px] sm:text-xs font-medium tracking-tight transition-all duration-300 ease-out ${
                 isActive ? 'text-orange-400' : 'text-gray-400 group-hover:text-gray-300'
               }`}>
                 {tab.label}

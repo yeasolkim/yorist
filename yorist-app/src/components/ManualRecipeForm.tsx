@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Recipe, RecipeIngredient, RecipeStep } from '@/lib/types';
 import { createClient } from '@supabase/supabase-js';
+import { triggerIngredientSync } from '@/lib/ingredientSync';
 
 // 고유 ID 생성 함수
 const generateId = (): string => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -46,64 +47,91 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
 
   // 재료 추가 (ingredients_master 테이블과 연동)
   const handleAddIngredient = async () => {
-    if (ingredientName.trim() && ingredientAmount.trim()) {
-      try {
-        // ingredients_master에 재료 추가 또는 기존 재료 찾기
-        let ingredientId = '';
-        
-        // 기존 재료가 있는지 확인
-        const { data: existingIngredient } = await supabase
+    if (!ingredientName.trim() || !ingredientAmount.trim()) return;
+    try {
+      // ingredients_master에 재료 추가 또는 기존 재료 찾기
+      let ingredientId = '';
+      
+      // 기존 재료가 있는지 확인
+      if (!ingredientName.trim()) return; // name 유효성 체크
+      const { data: existingIngredient } = await supabase
+        .from('ingredients_master')
+        .select('id')
+        .eq('name', ingredientName.trim())
+        .single();
+
+      if (existingIngredient) {
+        ingredientId = existingIngredient.id;
+      } else {
+        // 새 재료 추가
+        const { data: newIngredient, error } = await supabase
           .from('ingredients_master')
+          .insert({
+            name: ingredientName.trim(),
+            unit: ingredientUnit.trim() || '개',
+            shop_url: ingredientShopUrl.trim() || null,
+            is_favorite: false
+          })
           .select('id')
-          .eq('name', ingredientName.trim())
           .single();
 
-        if (existingIngredient) {
-          ingredientId = existingIngredient.id;
-        } else {
-          // 새 재료 추가
-          const { data: newIngredient, error } = await supabase
-            .from('ingredients_master')
-            .insert({
-              name: ingredientName.trim(),
-              unit: ingredientUnit.trim() || '개',
-              shop_url: ingredientShopUrl.trim() || null,
-              is_favorite: false
-            })
-            .select('id')
-            .single();
-
-          if (error) {
-            console.error('재료 추가 실패:', error);
-            alert('재료 추가에 실패했습니다.');
-            return;
-          }
-          ingredientId = newIngredient.id;
+        if (error) {
+          console.error('재료 추가 실패:', error);
+          alert('재료 추가에 실패했습니다.');
+          return;
         }
-
-        const newIngredient: RecipeIngredient = {
-          ingredient_id: ingredientId,
-          name: ingredientName.trim(),
-          amount: ingredientAmount.trim(),
-          unit: ingredientUnit.trim() || '개',
-          shopUrl: ingredientShopUrl.trim() || undefined
-        };
-
-        setIngredients(prev => [...prev, newIngredient]);
-        setIngredientName('');
-        setIngredientAmount('');
-        setIngredientUnit('');
-        setIngredientShopUrl('');
-      } catch (error) {
-        console.error('재료 추가 중 오류:', error);
-        alert('재료 추가 중 오류가 발생했습니다.');
+        ingredientId = newIngredient.id;
       }
+
+      const newIngredient: RecipeIngredient = {
+        ingredient_id: ingredientId,
+        name: ingredientName.trim(),
+        amount: ingredientAmount.trim(),
+        unit: ingredientUnit.trim() || '개',
+        shopUrl: ingredientShopUrl.trim() || undefined
+      };
+
+      setIngredients(prev => [...prev, newIngredient]);
+      setIngredientName('');
+      setIngredientAmount('');
+      setIngredientUnit('');
+      setIngredientShopUrl('');
+      triggerIngredientSync(); // 동기화 트리거
+    } catch (error) {
+      console.error('재료 추가 중 오류:', error);
+      alert('재료 추가 중 오류가 발생했습니다.');
     }
   };
 
-  // 재료 삭제
-  const handleRemoveIngredient = (index: number) => {
-    setIngredients(prev => prev.filter((_, i) => i !== index));
+  // 재료 삭제 (ingredients_master 테이블과 동기화)
+  const handleRemoveIngredient = async (index: number) => {
+    try {
+      const ingredientToRemove = ingredients[index];
+      
+      // ingredients_master에서 해당 재료가 다른 레시피에서 사용되지 않는지 확인
+      if (ingredientToRemove.ingredient_id) {
+        const { data: otherRecipes } = await supabase
+          .from('recipes')
+          .select('ingredients')
+          .neq('id', initialRecipe?.id || '')
+          .contains('ingredients', [{ ingredient_id: ingredientToRemove.ingredient_id }]);
+        
+        // 다른 레시피에서 사용되지 않는 경우에만 ingredients_master에서 삭제
+        if (!otherRecipes || otherRecipes.length === 0) {
+          await supabase
+            .from('ingredients_master')
+            .delete()
+            .eq('id', ingredientToRemove.ingredient_id);
+          triggerIngredientSync(); // 동기화 트리거
+        }
+      }
+      
+      // 로컬 상태에서 재료 제거
+      setIngredients(prev => prev.filter((_, i) => i !== index));
+    } catch (error) {
+      console.error('재료 삭제 중 오류:', error);
+      alert('재료 삭제 중 오류가 발생했습니다. 다시 시도해주세요.');
+    }
   };
 
   // 단계 추가
@@ -147,22 +175,45 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
     setEditIngredientUnit(ingredients[idx].unit);
     setEditIngredientShopUrl(ingredients[idx].shopUrl || '');
   };
-  // 재료 수정 저장
-  const handleSaveEditIngredient = (idx: number) => {
-    setIngredients(prev => prev.map((ing, i) =>
-      i === idx ? {
-        ...ing,
+  // 재료 수정 저장 (ingredients_master 테이블과 동기화)
+  const handleSaveEditIngredient = async (idx: number) => {
+    try {
+      const originalIngredient = ingredients[idx];
+      const updatedIngredient = {
+        ...originalIngredient,
         name: editIngredientName,
         amount: editIngredientAmount,
         unit: editIngredientUnit,
         shopUrl: editIngredientShopUrl
-      } : ing
-    ));
-    setEditingIngredientIdx(null);
-    setEditIngredientName('');
-    setEditIngredientAmount('');
-    setEditIngredientUnit('');
-    setEditIngredientShopUrl('');
+      };
+
+      // ingredients_master 테이블 업데이트 (재료명이 변경된 경우)
+      if (originalIngredient.ingredient_id && originalIngredient.name !== editIngredientName) {
+        await supabase
+          .from('ingredients_master')
+          .update({
+            name: editIngredientName,
+            unit: editIngredientUnit,
+            shop_url: editIngredientShopUrl || null
+          })
+          .eq('id', originalIngredient.ingredient_id);
+        triggerIngredientSync(); // 동기화 트리거
+      }
+
+      // 로컬 상태 업데이트
+      setIngredients(prev => prev.map((ing, i) =>
+        i === idx ? updatedIngredient : ing
+      ));
+      
+      setEditingIngredientIdx(null);
+      setEditIngredientName('');
+      setEditIngredientAmount('');
+      setEditIngredientUnit('');
+      setEditIngredientShopUrl('');
+    } catch (error) {
+      console.error('재료 수정 중 오류:', error);
+      alert('재료 수정 중 오류가 발생했습니다. 다시 시도해주세요.');
+    }
   };
   // 재료 수정 취소
   const handleCancelEditIngredient = () => {
@@ -190,6 +241,11 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
   const handleCancelEditStep = () => {
     setEditingStepIdx(null);
     setEditStepDescription('');
+  };
+
+  // 조리 단계 텍스트 변경 핸들러
+  const handleStepChange = (idx: number, value: string) => {
+    setSteps(prev => prev.map((step, i) => i === idx ? { ...step, description: value } : step));
   };
 
   // 폼 제출
@@ -236,6 +292,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
     }
     let active = true;
     (async () => {
+      if (!ingredientName.trim()) return; // name 유효성 체크
       const { data, error } = await supabase
         .from('ingredients_master')
         .select('name, unit, shop_url')
@@ -264,6 +321,11 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showSuggestions]);
+
+  // 조리 단계 중요 여부 변경 핸들러
+  const handleStepImportantChange = (idx: number, checked: boolean) => {
+    setSteps(prev => prev.map((step, i) => i === idx ? { ...step, isImportant: checked } : step));
+  };
 
   return (
     <div className="w-full max-w-md mx-auto px-2 sm:px-4 overflow-x-hidden bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl p-4 sm:p-6 animate-slideIn">
@@ -321,7 +383,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
           <label className="block text-white font-medium mb-3">재료 *</label>
           <div className="space-y-3">
             {ingredients.map((ingredient, index) => (
-              <div key={index} className="flex items-center gap-3 p-3 bg-[#2a2a2a] rounded-xl border border-[#3a3a3a]">
+              <div key={index} className="flex items-center justify-between p-2 bg-[#232323] rounded-xl mb-1">
                 {editingIngredientIdx === index ? (
                   <>
                     <input
@@ -360,6 +422,10 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
                     <div className="flex-1 min-w-0">
                       <div className="text-white font-medium">{ingredient.name}</div>
                       <div className="text-gray-400 text-sm">{ingredient.amount} {ingredient.unit}</div>
+                      {/* 구매링크 있음 표시 */}
+                      {ingredient.shopUrl && (
+                        <span className="inline-block mt-1 px-2 py-0.5 bg-orange-500 text-white text-xs rounded-full">구매링크 있음</span>
+                      )}
                     </div>
                     <button type="button" onClick={() => handleEditIngredient(index)} className="p-2 text-gray-400 hover:text-orange-400 transition-colors min-h-[44px] min-w-[44px]">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 11l6.293-6.293a1 1 0 011.414 0l2.586 2.586a1 1 0 010 1.414L11 15H9v-2z" /></svg>
@@ -449,42 +515,33 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
         <div>
           <label className="block text-white font-medium mb-3">조리 단계 *</label>
           <div className="space-y-3">
-            {steps.map((step, index) => (
-              <div key={index} className="flex items-start gap-3 p-3 bg-[#2a2a2a] rounded-xl border border-[#3a3a3a]">
-                {editingStepIdx === index ? (
-                  <>
-                    <input
-                      type="text"
-                      value={editStepDescription}
-                      onChange={e => setEditStepDescription(e.target.value)}
-                      placeholder="조리 단계 설명"
-                      className="flex-1 bg-[#232323] border border-[#444] text-white rounded-xl px-2 py-1 text-sm"
-                    />
-                    <button type="button" onClick={() => handleSaveEditStep(index)} className="ml-2 px-2 py-1 bg-orange-500 text-white rounded-lg text-xs">저장</button>
-                    <button type="button" onClick={handleCancelEditStep} className="ml-1 px-2 py-1 bg-gray-500 text-white rounded-lg text-xs">취소</button>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-white text-sm mb-1">단계 {index + 1}</div>
-                      <div className="text-gray-300">{step.description}</div>
-                    </div>
-                    <div className="flex gap-1">
-                      <button type="button" onClick={() => handleMoveStep(index, 'up')} disabled={index === 0} className="p-1 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
-                      </button>
-                      <button type="button" onClick={() => handleMoveStep(index, 'down')} disabled={index === steps.length - 1} className="p-1 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                      </button>
-                      <button type="button" onClick={() => handleEditStep(index)} className="p-1 text-gray-400 hover:text-orange-400 transition-colors">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 11l6.293-6.293a1 1 0 011.414 0l2.586 2.586a1 1 0 010 1.414L11 15H9v-2z" /></svg>
-                      </button>
-                      <button type="button" onClick={() => handleRemoveStep(index)} className="p-1 text-gray-400 hover:text-red-400 transition-colors">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
-                    </div>
-                  </>
-                )}
+            {steps.map((step, idx) => (
+              <div key={idx} className="flex items-center gap-2 mb-2">
+                <input
+                  type="text"
+                  value={step.description}
+                  onChange={e => handleStepChange(idx, e.target.value)}
+                  placeholder={`조리 단계 ${idx + 1}`}
+                  className="flex-1 bg-[#232323] border border-[#444] text-white rounded-xl px-2 py-1 text-sm"
+                />
+                {/* 중요 단계 체크박스 - 상세화면과 동일한 체크박스 스타일 */}
+                                  <button
+                    type="button"
+                    onClick={() => handleStepImportantChange(idx, !step.isImportant)}
+                    className={`ml-2 transition-all duration-200 ${
+                      step.isImportant 
+                        ? 'text-orange-400' 
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                    aria-label="중요 단계 토글"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                <button type="button" onClick={() => handleRemoveStep(idx)} className="p-2 text-gray-400 hover:text-red-400 transition-colors min-h-[44px] min-w-[44px]">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
               </div>
             ))}
             <div className="flex gap-2">
@@ -515,12 +572,15 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
           >
             취소
           </button>
+          {/*
           <button
             type="submit"
             className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-3 font-medium transition-colors"
           >
             저장
           </button>
+          */}
+          {/* 저장 버튼은 모든 변경이 실시간 반영되므로 제거함 */}
         </div>
       </form>
     </div>

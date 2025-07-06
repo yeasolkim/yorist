@@ -5,6 +5,8 @@ import { recipeService } from '@/lib/supabase';
 import RecipeCard from './RecipeCard';
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { useRecipeSync, triggerRecipeSync } from '@/lib/recipeSync';
+import Link from 'next/link';
 
 interface FavoritesPageProps {
   onRecipeClick?: (recipe: Recipe) => void;
@@ -23,6 +25,7 @@ export default function FavoritesPage({
   // Supabase 기반 즐겨찾기 레시피 조회
   const [favoriteRecipes, setFavoriteRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
+  const syncVersion = useRecipeSync();
 
   const supabaseToRecipe = (r: any): Recipe => ({
     id: r.id as string,
@@ -34,17 +37,17 @@ export default function FavoritesPage({
     createdat: r.createdat ? new Date(r.createdat) : new Date(),
   });
 
+  // 즐겨찾기 레시피 refetch
   useEffect(() => {
     setLoading(true);
     recipeService.getAllRecipes()
       .then(recipes => {
         const favs = recipes.filter(r => r.isfavorite && r.id !== undefined).map(supabaseToRecipe);
         setFavoriteRecipes(favs);
-        // 즐겨찾기 탭 진입 시 현재 즐겨찾기 id 리스트를 로컬스토리지에 저장(확인 처리)
         localStorage.setItem(FAVORITES_SEEN_KEY, JSON.stringify(favs.map(r => r.id)));
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [syncVersion]);
 
   // 즐겨찾기 식재료 쿼리
   const [favoriteIngredients, setFavoriteIngredients] = useState<any[]>([]);
@@ -113,32 +116,52 @@ export default function FavoritesPage({
       {favoriteIngredients.length > 0 && (
         <div className="mt-8 animate-fadeIn">
           <h2 className="text-lg font-bold text-white mb-3">즐겨찾기한 식재료</h2>
-          <ul className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
             {favoriteIngredients.map(item => (
-              <li key={item.id} className="flex items-center justify-between bg-[#232323] rounded-xl px-4 py-3">
-                <span className="text-white font-medium">{item.name}</span>
-                <div className="flex items-center gap-3">
-                  {item.shop_url && (
-                    <a href={item.shop_url} target="_blank" rel="noopener noreferrer" className="text-orange-400 underline text-sm">구매</a>
-                  )}
-                  <button
-                    onClick={async () => {
-                      // 하트 해제(즐겨찾기 해제)
-                      setFavoriteIngredients(favoriteIngredients.filter(i => i.id !== item.id));
-                      await supabase
-                        .from('ingredients_master')
-                        .update({ is_favorite: false })
-                        .eq('id', item.id);
-                    }}
-                    className="text-lg text-orange-400"
-                    aria-label="즐겨찾기 해제"
-                  >
-                    ♥
-                  </button>
+              <div key={item.id} className="block" onClick={() => window.location.href = `/ingredient/${item.id}` } tabIndex={0} role="button">
+                <div className="bg-[#232323] rounded-xl p-3 hover:border hover:border-orange-400 transition cursor-pointer h-14 flex items-center justify-between">
+                  {/* 재료명 */}
+                  <span className="text-white font-medium text-sm truncate">{item.name}</span>
+                  <div className="flex items-center gap-1">
+                    {item.shop_url && (
+                      <a 
+                        href={item.shop_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="flex items-center justify-center p-0.5 border border-orange-400 text-orange-500 rounded-full hover:bg-orange-50 transition"
+                        aria-label="구매링크"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path d="M3 3h2l.4 2M7 13h10l4-8H5.4" strokeLinecap="round" strokeLinejoin="round"/>
+                          <circle cx="9" cy="21" r="1" />
+                          <circle cx="20" cy="21" r="1" />
+                        </svg>
+                      </a>
+                    )}
+                    <button
+                      onClick={async (e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        if (!item.id) return;
+                        setFavoriteIngredients(favoriteIngredients.filter(i => i.id !== item.id));
+                        await supabase
+                          .from('ingredients_master')
+                          .update({ is_favorite: false })
+                          .eq('id', item.id);
+                        triggerRecipeSync();
+                      }}
+                      className="text-lg text-orange-400 hover:text-orange-300 transition"
+                      aria-label="즐겨찾기 해제"
+                    >
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
     </div>
