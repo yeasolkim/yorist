@@ -96,7 +96,15 @@ export default function IngredientDetailPage() {
           <h2 className="text-white text-xl font-bold mb-3">재료를 찾을 수 없습니다</h2>
           <p className="text-gray-400 mb-6">요청하신 재료가 존재하지 않거나 삭제되었습니다</p>
         </div>
-        <BottomNavigation />
+        <BottomNavigation
+          activeTab="home"
+          onTabChange={(tab) => {
+            if (tab === 'home') router.push('/');
+            else if (tab === 'recipebook') router.push('/?tab=recipebook');
+            else if (tab === 'favorites') router.push('/?tab=favorites');
+            else if (tab === 'search') router.push('/?tab=search');
+          }}
+        />
       </div>
     );
   }
