@@ -407,7 +407,6 @@ export default function HomePage() {
                 recipes={savedRecipes}
                 onRecipeClick={recipe => router.push(`/recipe/${recipe.id}`)}
                 onFavoriteToggle={(id, isfavorite) => handleFavoriteToggle(id, isfavorite)}
-                showFavorite={true}
                 favorites={favorites}
               />
             </div>

@@ -42,15 +42,14 @@ export default function SearchPage({
     recipeService.searchRecipes(searchQuery)
       .then(results => {
         setFilteredRecipes(results as Recipe[]);
-        // 추천 키워드 추출 - 재료명만 추출
+        // 추천 키워드 추출
         const query = searchQuery.toLowerCase();
         const keywords = new Set<string>();
         results.forEach(recipe => {
-          // 재료명에서만 키워드 추출
+          if (recipe.title?.toLowerCase().includes(query)) keywords.add(recipe.title);
+          if (recipe.description?.toLowerCase().includes(query)) keywords.add(recipe.description);
           recipe.ingredients?.forEach(ing => {
-            if (ing.name?.toLowerCase().includes(query)) {
-              keywords.add(ing.name);
-            }
+            if (ing.name?.toLowerCase().includes(query)) keywords.add(ing.name);
           });
         });
         setKeywordSuggestions(Array.from(keywords).slice(0, 8));
@@ -60,8 +59,6 @@ export default function SearchPage({
         setKeywordSuggestions([]);
       })
       .finally(() => setLoading(false));
-    
-
     // 재료도 동기화
     supabase
       .from('ingredients_master')
@@ -140,7 +137,7 @@ export default function SearchPage({
       {/* 실시간 추천 키워드 */}
       {searchQuery.trim() && keywordSuggestions.length > 0 && (
         <div className="mb-8">
-          <h3 className="text-white font-semibold mb-3">추천 재료명</h3>
+          <h3 className="text-white font-semibold mb-3">추천 키워드</h3>
           <div className="flex flex-wrap gap-2">
             {keywordSuggestions.map((keyword, index) => (
               <button
