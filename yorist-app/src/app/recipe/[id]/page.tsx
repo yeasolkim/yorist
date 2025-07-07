@@ -415,24 +415,55 @@ export default function RecipeDetailPage() {
       ) : (
         <>
           {/* 레시피 제목 - 심플하게 상단에만 표시 */}
-          <div className="mb-3 sm:mb-4">
-            <div className="flex items-center gap-2 sm:gap-3">
-              {/* 뒤로가기 버튼 - 제목 왼쪽 */}
-              <button
-                onClick={() => router.back()}
-                className="mr-2 p-1 rounded-full bg-[#232323] hover:bg-[#2a2a2a] text-white flex items-center justify-center focus:outline-none"
-                aria-label="뒤로가기"
-                style={{ minWidth: 32, minHeight: 32 }}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <div className="flex-1 flex flex-col items-center">
+          <div className="mb-3 sm:mb-4 relative">
+            {/* 뒤로가기 버튼 - 절대 위치로 왼쪽에 고정 */}
+            <button
+              onClick={() => router.back()}
+              className="absolute left-0 top-1/2 -translate-y-1/2 p-1 rounded-full bg-[#232323] hover:bg-[#2a2a2a] text-white flex items-center justify-center focus:outline-none z-10"
+              aria-label="뒤로가기"
+              style={{ minWidth: 32, minHeight: 32 }}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            {/* 제목과 즐겨찾기 버튼 - 정확히 중앙에 배치 */}
+            <div className="flex flex-col items-center justify-center">
+              <div className="flex items-center gap-2">
                 <h1 className="text-lg sm:text-xl font-bold text-white leading-tight text-center">{recipe.title}</h1>
-                {/* 주황색 밑줄(50% 길이, 중앙)로 강조 */}
-                <div className="w-1/2 h-[2.5px] bg-gradient-to-r from-orange-400 to-orange-500 rounded-full mx-auto mt-2" aria-hidden="true"></div>
+                {/* 즐겨찾기 버튼 - 제목 옆에 배치 */}
+                <button
+                  onClick={async () => {
+                    if (recipe) {
+                      const newFavoriteState = !recipe.isfavorite;
+                      await recipeService.toggleFavorite(recipe.id, newFavoriteState);
+                      setRecipe({ ...recipe, isfavorite: newFavoriteState });
+                    }
+                  }}
+                  className={`p-2 rounded-full transition-all duration-200 ease-out ${
+                    recipe?.isfavorite 
+                      ? 'bg-orange-500/20 text-orange-400 shadow-lg' 
+                      : 'bg-[#2a2a2a] text-gray-400 hover:bg-[#3a3a3a]'
+                  }`}
+                  aria-label={recipe?.isfavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+                >
+                  <svg
+                    className={`w-5 h-5 ${recipe?.isfavorite ? 'scale-110' : ''} transition-transform duration-200`}
+                    fill={recipe?.isfavorite ? 'currentColor' : 'none'}
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                    />
+                  </svg>
+                </button>
               </div>
+              {/* 주황색 밑줄(50% 길이, 중앙)로 강조 */}
+              <div className="w-1/2 h-[2.5px] bg-gradient-to-r from-orange-400 to-orange-500 rounded-full mx-auto mt-2" aria-hidden="true"></div>
             </div>
           </div>
           
