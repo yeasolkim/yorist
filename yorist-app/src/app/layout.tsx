@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: '요리스트 - 한국 요리 레시피',
-  description: '한국 요리 초보자를 위한 간편한 레시피 앱',
+  title: '요리스트 - 나만의 요리 리스트',
+  description: '요리 초보자를 위한 간편한 레시피 앱',
   keywords: '한국요리, 레시피, 요리초보, 한식',
   authors: [{ name: '요리스트 팀' }],
   viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',

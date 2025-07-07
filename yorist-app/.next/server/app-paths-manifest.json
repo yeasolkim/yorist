@@ -1,4 +1,6 @@
 {
+  "/recipe/[id]/page": "app/recipe/[id]/page.js",
+  "/api/generate-recipe/route": "app/api/generate-recipe/route.js",
   "/page": "app/page.js",
-  "/recipe/[id]/page": "app/recipe/[id]/page.js"
+  "/api/youtube-transcript/route": "app/api/youtube-transcript/route.js"
 }

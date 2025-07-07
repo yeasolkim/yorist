@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+console.log('=== /api/generate-recipe 라우트 진입 ===');
+
 // OpenAI API 키는 환경변수에서 불러옴
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 // 레시피 생성용 프롬프트 생성 함수
 function buildRecipePrompt(transcript: string, youtubeUrl: string) {
+  // 한글 주석: 조리 단계 개수 제한 문구 추가
   return `아래 유튜브 영상의 자막을 분석해서, 요리 레시피 데이터를 json 형식으로 만들어줘.\n
 json에는 title(제목), description(설명), ingredients(재료 배열: {name, amount, unit, shopUrl}), steps(조리 단계 배열: {description, isImportant}), videoUrl(유튜브 링크), channel(채널명) 필드가 포함되어야 해.\n
 특히 steps(조리 단계) 배열의 모든 객체에는 반드시 isImportant: false 필드를 포함해야 해.\n
-아래 예시처럼 만들어줘:\n
-예시:\n[
+조리 단계(steps)는 최대 10개까지만 생성해줘.\n
+아래 예시처럼 만들어줘:\n예시:\n[
   {
     "description": "가지를 깨끗하게 씻고, 꼭지 주변의 가시에 주의합니다.",
     "isImportant": false
@@ -24,13 +27,31 @@ json에는 title(제목), description(설명), ingredients(재료 배열: {name,
 
 // POST /api/generate-recipe
 export async function POST(req: NextRequest) {
+  // 한글 주석: JSON 닫는 괄호 자동 보정 함수 (블록 밖으로 이동)
+  function autoFixJsonBrackets(jsonStr: string): string {
+    // 중괄호와 대괄호 개수 세기
+    const openCurly = (jsonStr.match(/\{/g) || []).length;
+    const closeCurly = (jsonStr.match(/\}/g) || []).length;
+    const openSquare = (jsonStr.match(/\[/g) || []).length;
+    const closeSquare = (jsonStr.match(/\]/g) || []).length;
+    let fixed = jsonStr;
+    // 부족한 만큼 닫는 괄호 추가
+    if (openCurly > closeCurly) {
+      fixed += '}'.repeat(openCurly - closeCurly);
+    }
+    if (openSquare > closeSquare) {
+      fixed += ']'.repeat(openSquare - closeSquare);
+    }
+    return fixed;
+  }
   try {
     const { youtubeUrl } = await req.json();
     if (!youtubeUrl || typeof youtubeUrl !== 'string') {
       return NextResponse.json({ error: '유효한 유튜브 링크를 입력하세요.' }, { status: 400 });
     }
     // 1. 자막 추출 (내부 API 호출)
-    const transcriptRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/youtube-transcript`, {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const transcriptRes = await fetch(`${baseUrl}/api/youtube-transcript`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ youtubeUrl })
@@ -41,8 +62,14 @@ export async function POST(req: NextRequest) {
     }
     const transcript = transcriptData.transcript;
 
+    // 자막 일부 콘솔 출력
+    console.log('[유튜브 자막 일부]', transcript.slice(0, 300));
+
     // 2. 프롬프트 생성
     const prompt = buildRecipePrompt(transcript, youtubeUrl);
+
+    // 프롬프트 콘솔 출력
+    console.log('[생성된 프롬프트]', prompt);
 
     // 3. OpenAI GPT API 호출
     if (!OPENAI_API_KEY) {
@@ -75,12 +102,26 @@ export async function POST(req: NextRequest) {
       recipeJson = recipeJson.replace(/^```(json)?/i, '').replace(/```$/, '').trim();
     }
     try {
+      // 1차 파싱 시도
       const recipe = JSON.parse(recipeJson);
       return NextResponse.json({ recipe });
     } catch (e) {
-      return NextResponse.json({ error: 'GPT 응답에서 JSON 파싱에 실패했습니다.', raw: recipeJson }, { status: 500 });
+      // 자동 보정 후 재파싱 시도
+      const fixedJson = autoFixJsonBrackets(recipeJson);
+      try {
+        const recipe = JSON.parse(fixedJson);
+        // 한글 주석: 자동 보정 성공 시, 원본과 보정 여부도 함께 반환
+        return NextResponse.json({ recipe, autoFixed: true, message: 'JSON 자동 보정 후 파싱 성공' });
+      } catch (e2) {
+        // 한글 주석: 여전히 파싱 실패 시, 원본과 에러 반환
+        return NextResponse.json({ error: 'GPT 응답에서 JSON 파싱에 실패했습니다.', raw: recipeJson, autoFixTried: true }, { status: 500 });
+      }
     }
   } catch (error) {
-    return NextResponse.json({ error: '요청 처리 중 오류가 발생했습니다.' }, { status: 500 });
+    console.error('=== /api/generate-recipe 에러 발생 ===');
+    console.error('에러 타입:', typeof error);
+    console.error('에러 메시지:', error);
+    console.error('에러 스택:', error instanceof Error ? error.stack : '스택 없음');
+    return NextResponse.json({ error: '요청 처리 중 오류가 발생했습니다.', details: String(error) }, { status: 500 });
   }
 } 
