@@ -14,6 +14,7 @@ import YoristHeader from '@/components/YoristHeader';
 import RecipeCard from '@/components/RecipeCard';
 import ManualRecipeForm from '@/components/ManualRecipeForm';
 import { recipeService } from '@/lib/supabase';
+import CookingLoader from '@/components/CookingLoader';
 
 export default function HomePage() {
   const router = useRouter();
@@ -33,6 +34,7 @@ export default function HomePage() {
   const [parsedRecipe, setParsedRecipe] = useState<Partial<Recipe> | null>(null); // JSON 파싱 결과
   const [showPromptUI, setShowPromptUI] = useState(false);
   const [showPromptUIOnButtonRow, setShowPromptUIOnButtonRow] = useState(false); // Lilys/NotebookLM 버튼 행에 프롬프트 UI가 표시되는지 여부
+  const [isSaving, setIsSaving] = useState(false); // 레시피 저장 로딩 상태
 
   // Supabase에서 레시피 불러오기 (최초 1회 + 탭 변경 시)
   useEffect(() => {
@@ -40,7 +42,7 @@ export default function HomePage() {
       setLoading(true);
       const recipes = await getRecipesAsync();
       setSavedRecipes(recipes);
-      setFavorites(new Set(recipes.filter(r => r.isfavorite).map(r => r.id)));
+      setFavorites(new Set(recipes.filter(r => r.isfavorite).map(r => r.id))); // DB 필드명과 일치
       setLoading(false);
     };
     fetchRecipes();
@@ -61,7 +63,7 @@ export default function HomePage() {
     // 토글 후 전체 레시피 목록 새로고침
     const recipes = await recipeService.getAllRecipes();
     setSavedRecipes(recipes);
-    setFavorites(new Set(recipes.filter(r => r.isfavorite).map(r => r.id)));
+    setFavorites(new Set(recipes.filter(r => r.isfavorite).map(r => r.id))); // DB 필드명과 일치
   };
 
   // 탭 변경
@@ -76,7 +78,7 @@ export default function HomePage() {
     if (success) {
       const recipes = await getRecipesAsync();
       setSavedRecipes(recipes);
-      setFavorites(new Set(recipes.filter(r => r.isfavorite).map(r => r.id)));
+      setFavorites(new Set(recipes.filter(r => r.isfavorite).map(r => r.id))); // DB 필드명과 일치
       setActiveTab('home');
     }
     setLoading(false);
@@ -120,24 +122,25 @@ export default function HomePage() {
         Array.isArray(recipesToParse[0].ingredients) &&
         Array.isArray(recipesToParse[0].steps)
       ) {
-        // RecipeIngredient 구조로 변환
+        // DB 구조에 맞게 필드명 변환 (shop_url, ingredient_id, videourl)
         const firstRecipe = recipesToParse[0];
         const normalizedIngredients = firstRecipe.ingredients.map((ingredient: any, index: number) => ({
-          ingredient_id: ingredient.ingredient_id || `${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`,
+          ingredient_id: ingredient.ingredient_id || '',
           name: ingredient.name || '',
           amount: ingredient.amount || '',
           unit: ingredient.unit || '',
-          shopUrl: ingredient.shopUrl || ingredient.shop_url || ''
+          shop_url: ingredient.shop_url || '', // DB 필드명과 일치 (snake_case)
         }));
         const normalizedSteps = firstRecipe.steps.map((step: any) => ({
-          description: step.description || step || ''
+          description: step.description || step || '',
+          isImportant: typeof step.isImportant === 'boolean' ? step.isImportant : false
         }));
         const parsedRecipeData = {
           title: firstRecipe.title,
           description: firstRecipe.description || '',
           ingredients: normalizedIngredients,
           steps: normalizedSteps,
-          videoUrl: firstRecipe.videourl || firstRecipe.videoUrl || '', // videourl 우선
+          videourl: firstRecipe.videourl || '', // snake_case로 통일
           tags: firstRecipe.tags || [],
           isVegetarian: firstRecipe.isVegetarian || false
         };
@@ -154,7 +157,7 @@ export default function HomePage() {
 
   // 레시피 자동 생성 핸들러 (현재 데이터베이스 구조에 맞게 수정)
   const prompt = youtubeUrl
-    ? `아래 유튜브 영상의 스크립트를 분석해서, 요리 레시피 데이터를 json 형식으로 만들어줘.\n\n현재 데이터베이스 구조에 맞춰서 다음 형식으로 출력해줘:\n\n{\n  "title": "레시피 제목",\n  "description": "레시피 설명",\n  "ingredients": [\n    {\n      "name": "재료명",\n      "amount": "수량",\n      "unit": "단위",\n      "shopUrl": "구매링크(선택사항)"\n    }\n  ],\n  "steps": [\n    {\n      "description": "조리 단계 설명",\n      "isImportant": false\n    }\n  ],\n  "videourl": "${youtubeUrl}"\n}\n\n- steps 배열의 모든 객체에는 반드시 isImportant: false 필드를 포함해야 해.\n- 각 단계는 반드시 description(문자열)과 isImportant(boolean, 기본값 false) 필드를 모두 포함해야 해.\n- 다른 설명 없이 json 데이터만 출력해줘.\n\n유튜브 링크: ${youtubeUrl}`
+    ? `아래 유튜브 영상의 스크립트를 분석해서, 요리 레시피 데이터를 json 형식으로 만들어줘.\n\n현재 데이터베이스 구조에 맞춰서 다음 형식으로 출력해줘:\n\n{\n  "title": "레시피 제목",\n  "description": "레시피 설명",\n  "ingredients": [\n    {\n      "name": "재료명",\n      "amount": "수량",\n      "unit": "단위",\n      "shop_url": "구매링크(선택사항)"\n    }\n  ],\n  "steps": [\n    {\n      "description": "조리 단계 설명",\n      "isImportant": false\n    }\n  ],\n  "videourl": "${youtubeUrl}"\n}\n\n중요한 규칙:\n- steps 배열의 모든 객체에서 isImportant 값은 반드시 false로 설정해야 해.\n- 각 단계는 반드시 description(문자열)과 isImportant(boolean, false) 필드를 모두 포함해야 해.\n- isImportant를 true로 설정하지 마세요. 모든 단계는 false여야 합니다.\n- 다른 설명 없이 json 데이터만 출력해줘.\n\n유튜브 링크: ${youtubeUrl}`
     : '';
 
   const handleCopyPrompt = () => {
@@ -186,34 +189,61 @@ export default function HomePage() {
 
   // 레시피 자동 생성 핸들러
   const handleAutoGenerateRecipe = async () => {
-    if (!youtubeUrl) return;
+    // 1. 버튼 클릭 시점
+    console.log('[레시피 자동 생성] 버튼 클릭됨');
+
+    // 2. 유튜브 URL 유효성 체크
+    if (!youtubeUrl) {
+      console.warn('[레시피 자동 생성] 유튜브 URL이 비어있음');
+      return;
+    }
+
+    // 3. 로딩 상태 진입
     setIsGenerating(true);
     setGenerateError(null);
     setGeneratedRecipe(null);
+    console.log('[레시피 자동 생성] API 요청 준비', { youtubeUrl });
+
     try {
+      // 4. API 요청 시작
       const res = await fetch('/api/generate-recipe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ youtubeUrl })
       });
+      console.log('[레시피 자동 생성] API 응답 수신', res);
+
+      // 5. 응답 데이터 파싱
       const data = await res.json();
+      console.log('[레시피 자동 생성] 응답 데이터', data);
+
+      // 6. 성공/실패 분기
       if (!res.ok || !data.recipe) {
+        console.error('[레시피 자동 생성] 에러 발생', data.error || '레시피 생성에 실패했습니다.');
         setGenerateError(data.error || '레시피 생성에 실패했습니다.');
       } else {
-        setGeneratedRecipe(data.recipe);
+        console.log('[레시피 자동 생성] 레시피 생성 성공', data.recipe);
+        setParsedRecipe(data.recipe);
+        setShowManualForm(true);
       }
     } catch (error) {
+      // 7. 예외 처리
+      console.error('[레시피 자동 생성] 예외 발생', error);
       setGenerateError('레시피 생성 중 오류가 발생했습니다.');
     } finally {
+      // 8. 로딩 상태 해제
       setIsGenerating(false);
+      console.log('[레시피 자동 생성] API 요청 종료');
     }
   };
 
   const handleSaveGeneratedRecipe = async () => {
     if (!generatedRecipe) return;
+    setIsSaving(true); // 저장 시작
     await handleSaveRecipe(generatedRecipe);
     setGeneratedRecipe(null);
     setYoutubeUrl('');
+    setIsSaving(false); // 저장 끝
   };
 
   // 유튜브 링크 입력 핸들러
@@ -280,17 +310,7 @@ export default function HomePage() {
                 />
                 {showPromptUI && youtubeUrl && (
                   <div className="relative">
-                    {/* 닫기 버튼 */}
-                    <button
-                      className="absolute top-0 right-0 mt-1 mr-1 z-10 p-2 text-gray-400 hover:text-white"
-                      onClick={() => setShowPromptUI(false)}
-                      aria-label="닫기"
-                    >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                    {/* NotebookLM, Lilys 버튼 2개를 나란히 */}
+                    {/* Lilys, x 버튼 삭제됨 */}
                     <div className="flex gap-2 mt-2">
                       <button
                         className="flex-1 w-1/2 btn-primary py-3 rounded-xl text-base font-bold"
@@ -300,42 +320,27 @@ export default function HomePage() {
                       >
                         NotebookLM
                       </button>
-                      <a
-                        href="https://lilys.ai/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 w-1/2 btn-primary py-3 rounded-xl text-base font-bold flex items-center justify-center bg-gradient-to-r from-orange-400 to-orange-500 text-white hover:from-orange-500 hover:to-orange-600 transition-all"
-                        style={{ textAlign: 'center', textDecoration: 'none' }}
-                      >
-                        Lilys
-                      </a>
                     </div>
-                    {/* 레시피 자동 생성 버튼 */}
-                    <button
-                      className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-white py-3 rounded-xl text-base font-bold mt-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 ease-out"
-                      onClick={handleAutoGenerateRecipe}
-                      disabled={!youtubeUrl || isGenerating}
-                    >
-                      {isGenerating ? '레시피 생성 중...' : '레시피 자동 생성'}
-                    </button>
+                    {/* 레시피 자동 생성 버튼 및 로딩 */}
+                    {isGenerating ? (
+                      <div className="w-full flex justify-center items-center mt-4 mb-2">
+                        <CookingLoader />
+                      </div>
+                    ) : (
+                      <button
+                        className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-white py-3 rounded-xl text-base font-bold mt-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 ease-out"
+                        onClick={handleAutoGenerateRecipe}
+                        disabled={!youtubeUrl || isGenerating}
+                      >
+                        레시피 자동 생성
+                      </button>
+                    )}
                     {/* 자동 생성 결과/에러/미리보기 UI */}
                     {isGenerating && (
                       <div className="text-orange-400 text-center mt-2">레시피를 생성 중입니다...</div>
                     )}
                     {generateError && (
                       <div className="text-red-500 text-center mt-2">{generateError}</div>
-                    )}
-                    {generatedRecipe && (
-                      <div className="mt-4 bg-[#232323] rounded-xl p-4 flex flex-col gap-2">
-                        <div className="text-orange-400 font-bold mb-1">생성된 레시피 미리보기</div>
-                        <RecipeCard recipe={generatedRecipe} onClick={() => {}} onFavoriteToggle={(id, isFavorite) => handleFavoriteToggle(id, isFavorite)} favorites={new Set()} />
-                        <button
-                          className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2 font-medium mt-2"
-                          onClick={handleSaveGeneratedRecipe}
-                        >
-                          레시피 저장
-                        </button>
-                      </div>
                     )}
                     {/* 프롬프트 생성 UI 및 json 추가 UI */}
                     <div className="mt-4 bg-[#232323] rounded-xl p-3 flex flex-col gap-2">

@@ -1,5 +1,5 @@
-import { Recipe, RecipeIngredient } from './types';
-import { recipeService, SupabaseRecipe, convertToSupabaseRecipe, convertFromSupabaseRecipe } from './supabase';
+import { Recipe, RecipeIngredient, SupabaseRecipe } from './types';
+import { recipeService, convertToSupabaseRecipe, convertFromSupabaseRecipe } from './supabase';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
@@ -10,46 +10,32 @@ const processIngredients = async (ingredients: RecipeIngredient[]): Promise<Reci
   
   for (const ingredient of ingredients) {
     try {
-      // 기존 재료가 있는지 확인
-      const { data: existingIngredient } = await supabase
-        .from('ingredients_master')
-        .select('id')
-        .eq('name', ingredient.name)
-        .single();
-
       let ingredientId = ingredient.ingredient_id;
-
-      if (existingIngredient) {
-        // 기존 재료가 있으면 해당 ID 사용
-        ingredientId = existingIngredient.id;
-      } else {
-        // 새 재료 추가
+      // ingredient_id가 있으면 그대로 사용, 없으면 새로 추가
+      if (!ingredientId) {
+        // ingredient_id가 없으면 새로 추가
         const { data: newIngredient, error } = await supabase
           .from('ingredients_master')
           .insert({
             name: ingredient.name,
             unit: ingredient.unit || '개',
-            shop_url: ingredient.shopUrl || null,
-            is_favorite: false
+            shop_url: ingredient.shop_url || null, // DB 필드명과 일치 (snake_case)
+            is_favorite: false // DB 필드명과 일치 (snake_case)
           })
           .select('id')
           .single();
-
         if (error) {
           console.error('재료 추가 실패:', error);
-          // 에러가 발생해도 계속 진행 (기존 ingredient_id 사용)
         } else {
           ingredientId = newIngredient.id;
         }
       }
-
       processedIngredients.push({
         ...ingredient,
         ingredient_id: ingredientId
       });
     } catch (error) {
       console.error('재료 처리 중 오류:', error);
-      // 에러가 발생해도 기존 데이터 유지
       processedIngredients.push(ingredient);
     }
   }
@@ -89,8 +75,8 @@ export const saveRecipe = (recipe: Recipe): boolean => {
     const newRecipe = {
       ...recipe,
       id: recipe.id || generateId(),
-      createdat: recipe.createdat || new Date().toISOString(),
-      isfavorite: recipe.isfavorite ?? false
+      createdat: recipe.createdat || new Date().toISOString(), // DB 필드명과 일치
+      isfavorite: recipe.isfavorite ?? false // DB 필드명과 일치
     };
     
     const updatedRecipes = [newRecipe, ...existingRecipes];
@@ -115,8 +101,6 @@ export const saveRecipeAsync = async (recipe: Recipe): Promise<boolean> => {
     
     // Supabase에 저장 시도
     const supabaseRecipe = { ...convertToSupabaseRecipe(recipeWithProcessedIngredients) };
-    delete supabaseRecipe.isVegetarian;
-    // delete supabaseRecipe.videoUrl; // 컬럼명 맞추면 삭제 X
     const savedRecipe = await recipeService.createRecipe(supabaseRecipe);
     
     if (savedRecipe) {
@@ -214,7 +198,7 @@ export const toggleRecipeFavorite = (recipeId: string): boolean => {
     const existingRecipes = getRecipes();
     const updatedRecipes = existingRecipes.map(recipe => 
       recipe.id === recipeId 
-        ? { ...recipe, isfavorite: !recipe.isfavorite }
+        ? { ...recipe, isfavorite: !recipe.isfavorite } // DB 필드명과 일치
         : recipe
     );
     return safeLocalStorage.set(RECIPES_STORAGE_KEY, JSON.stringify(updatedRecipes));
@@ -224,8 +208,8 @@ export const toggleRecipeFavorite = (recipeId: string): boolean => {
   }
 };
 
-// 모든 레시피의 재료(이름, shopUrl) 중복 없이 집계
-export const getAllIngredientsWithShopUrl = (): { name: string; shopUrl?: string }[] => {
+// 모든 레시피의 재료(이름, shop_url) 중복 없이 집계
+export const getAllIngredientsWithShopUrl = (): { name: string; shop_url?: string }[] => {
   try {
     const recipes = getRecipes();
     const ingredientMap = new Map<string, string | undefined>();
@@ -233,14 +217,14 @@ export const getAllIngredientsWithShopUrl = (): { name: string; shopUrl?: string
     recipes.forEach(recipe => {
       recipe.ingredients.forEach(ingredient => {
         if (!ingredientMap.has(ingredient.name)) {
-          ingredientMap.set(ingredient.name, ingredient.shopUrl);
+          ingredientMap.set(ingredient.name, ingredient.shop_url);
         }
       });
     });
     
-    return Array.from(ingredientMap.entries()).map(([name, shopUrl]) => ({ 
+    return Array.from(ingredientMap.entries()).map(([name, shop_url]) => ({ 
       name, 
-      shopUrl 
+      shop_url 
     }));
   } catch (error) {
     console.error('재료 정보 조회 실패:', error);
@@ -271,7 +255,7 @@ export const getAllIngredientNames = (): string[] => {
 export const getFavoriteRecipes = (): Recipe[] => {
   try {
     const recipes = getRecipes();
-    return recipes.filter(recipe => recipe.isfavorite);
+    return recipes.filter(recipe => recipe.isfavorite); // DB 필드명과 일치
   } catch (error) {
     console.error('즐겨찾기 레시피 조회 실패:', error);
     return [];

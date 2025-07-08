@@ -49,20 +49,10 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
   const handleAddIngredient = async () => {
     if (!ingredientName.trim() || !ingredientAmount.trim()) return;
     try {
-      // ingredients_master에 재료 추가 또는 기존 재료 찾기
       let ingredientId = '';
-      
-      // 기존 재료가 있는지 확인
-      if (!ingredientName.trim()) return; // name 유효성 체크
-      const { data: existingIngredient } = await supabase
-        .from('ingredients_master')
-        .select('id')
-        .eq('name', ingredientName.trim())
-        .single();
-
-      if (existingIngredient) {
-        ingredientId = existingIngredient.id;
-      } else {
+      // ingredient_id가 있으면 그대로 사용, 없으면 새로 추가
+      // name으로는 더 이상 조회하지 않음
+      if (!ingredientId) {
         // 새 재료 추가
         const { data: newIngredient, error } = await supabase
           .from('ingredients_master')
@@ -74,7 +64,6 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
           })
           .select('id')
           .single();
-
         if (error) {
           console.error('재료 추가 실패:', error);
           alert('재료 추가에 실패했습니다.');
@@ -82,15 +71,13 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
         }
         ingredientId = newIngredient.id;
       }
-
       const newIngredient: RecipeIngredient = {
         ingredient_id: ingredientId,
         name: ingredientName.trim(),
         amount: ingredientAmount.trim(),
         unit: ingredientUnit.trim() || '개',
-        shopUrl: ingredientShopUrl.trim() || undefined
+        shop_url: ingredientShopUrl.trim() || undefined
       };
-
       setIngredients(prev => [...prev, newIngredient]);
       setIngredientName('');
       setIngredientAmount('');
@@ -173,7 +160,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
     setEditIngredientName(ingredients[idx].name);
     setEditIngredientAmount(ingredients[idx].amount);
     setEditIngredientUnit(ingredients[idx].unit);
-    setEditIngredientShopUrl(ingredients[idx].shopUrl || '');
+            setEditIngredientShopUrl(ingredients[idx].shop_url || '');
   };
   // 재료 수정 저장 (ingredients_master 테이블과 동기화)
   const handleSaveEditIngredient = async (idx: number) => {
@@ -184,7 +171,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
         name: editIngredientName,
         amount: editIngredientAmount,
         unit: editIngredientUnit,
-        shopUrl: editIngredientShopUrl
+        shop_url: editIngredientShopUrl
       };
 
       // ingredients_master 테이블 업데이트 (재료명이 변경된 경우)
@@ -284,7 +271,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
           name: ing.name,
           amount: ing.amount,
           unit: ing.unit,
-          shopUrl: ing.shopUrl || "",
+          shop_url: ing.shop_url || "",
           ingredient_id: ing.ingredient_id || ""
         })),
         steps: steps.map(step => ({
@@ -472,7 +459,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
                       <div className="text-white font-medium">{ingredient.name}</div>
                       <div className="text-gray-400 text-sm">{ingredient.amount} {ingredient.unit}</div>
                       {/* 구매링크 있음 표시 */}
-                      {ingredient.shopUrl && (
+                      {ingredient.shop_url && (
                         <span className="inline-block mt-1 px-2 py-0.5 bg-orange-500 text-white text-xs rounded-full">구매링크 있음</span>
                       )}
                     </div>

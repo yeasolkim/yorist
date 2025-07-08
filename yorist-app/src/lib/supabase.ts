@@ -8,32 +8,16 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // 기존 types.ts에서 타입 import
-import { Recipe, RecipeIngredient, RecipeStep } from './types'
+import { Recipe, RecipeIngredient, RecipeStep, SupabaseRecipe } from './types'
 
-// Supabase용 레시피 타입 (RecipeIngredient 구조 지원)
-export interface SupabaseRecipe {
-  id?: string
-  title: string
-  description: string
-  ingredients: RecipeIngredient[]
-  steps: RecipeStep[]
-  videourl?: string // DB 컬럼명과 일치
-  isVegetarian?: boolean
-  createdat?: string
-  isfavorite?: boolean
-  updated_at?: string
-  thumbnail_url?: string
-}
-
-// 타입 변환 함수들
+// 타입 변환 함수들 (실제 DB 스키마와 일치)
 export const convertToSupabaseRecipe = (recipe: Recipe): Omit<SupabaseRecipe, 'id' | 'createdat' | 'updated_at'> => ({
   title: recipe.title,
   description: recipe.description,
   ingredients: recipe.ingredients,
   steps: recipe.steps,
-  videourl: recipe.videoUrl, // DB 컬럼명과 일치
-  isVegetarian: recipe.isVegetarian,
-  isfavorite: recipe.isfavorite,
+  videourl: recipe.videourl, // snake_case로 통일
+  isfavorite: recipe.isfavorite, // DB 필드명과 일치 (snake_case)
 });
 
 export const convertFromSupabaseRecipe = (recipe: SupabaseRecipe): Recipe => ({
@@ -42,10 +26,12 @@ export const convertFromSupabaseRecipe = (recipe: SupabaseRecipe): Recipe => ({
   description: recipe.description,
   ingredients: recipe.ingredients,
   steps: recipe.steps,
-  videoUrl: recipe.videourl, // DB 컬럼명과 일치
-  isVegetarian: recipe.isVegetarian,
-  createdat: new Date(recipe.createdat!),
-  isfavorite: recipe.isfavorite ?? false
+  videourl: recipe.videourl, // snake_case로 통일
+  channel: undefined, // DB에 없는 필드
+  tags: [], // DB에 없는 필드
+  isVegetarian: false, // DB에 없는 필드
+  createdat: new Date(recipe.createdat!), // DB 필드명과 일치 (snake_case)
+  isfavorite: recipe.isfavorite ?? false // DB 필드명과 일치 (snake_case)
 });
 
 // RecipeIngredient[] → DB 저장용 변환 (snake_case)
@@ -55,7 +41,7 @@ export const toDbIngredients = (ingredients: RecipeIngredient[]) =>
     name: ing.name,
     amount: ing.amount,
     unit: ing.unit,
-    shop_url: ing.shopUrl || null // snake_case로 변환
+    shop_url: ing.shop_url || '', // null 대신 빈 문자열로 변환
   }));
 
 // 레시피 관련 데이터베이스 함수들
@@ -66,7 +52,7 @@ export const recipeService = {
       const { data, error } = await supabase
         .from('recipes')
         .select('*')
-        .order('createdat', { ascending: false })
+        .order('createdat', { ascending: false }) // DB 필드명과 일치
 
       if (error) {
         console.error('레시피 조회 실패:', error)
@@ -108,8 +94,8 @@ export const recipeService = {
         .from('recipes')
         .insert([{
           ...recipe,
-          createdat: new Date().toISOString(),
-          isfavorite: false
+          createdat: new Date().toISOString(), // DB 필드명과 일치
+          isfavorite: false // DB 필드명과 일치
         }])
         .select()
         .single()
@@ -175,7 +161,7 @@ export const recipeService = {
         .from('recipes')
         .select('*')
         .ilike('title', `%${searchTerm}%`)
-        .order('createdat', { ascending: false })
+        .order('createdat', { ascending: false }) // DB 필드명과 일치
 
       if (error) {
         console.error('레시피 검색 실패:', error)
@@ -194,7 +180,7 @@ export const recipeService = {
     try {
       const { error } = await supabase
         .from('recipes')
-        .update({ isfavorite: isFavorite })
+        .update({ isfavorite: isFavorite }) // DB 필드명과 일치
         .eq('id', id)
 
       if (error) {

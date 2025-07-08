@@ -3,7 +3,7 @@
 import { Recipe } from '@/lib/types';
 import { recipeService } from '@/lib/supabase';
 import RecipeCard from './RecipeCard';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRecipeSync, triggerRecipeSync } from '@/lib/recipeSync';
 import Link from 'next/link';
@@ -28,14 +28,23 @@ export default function FavoritesPage({
   const syncVersion = useRecipeSync();
 
   const supabaseToRecipe = (r: any): Recipe => ({
-    id: r.id as string,
+    id: r.id,
     title: r.title,
     description: r.description,
-    ingredients: r.ingredients,
-    steps: r.steps,
-    isfavorite: r.isfavorite,
-    createdat: r.createdat ? new Date(r.createdat) : new Date(),
+    ingredients: r.ingredients || [],
+    steps: r.steps || [],
+    videourl: r.videourl || '', // DB 필드명과 일치
+    channel: r.channel || '',
+    tags: r.tags || [],
+    isVegetarian: r.isVegetarian || false,
+    isfavorite: r.isfavorite, // DB 필드명과 일치
+    createdat: r.createdat ? new Date(r.createdat) : new Date(), // DB 필드명과 일치
   });
+
+  const recipes = useMemo(() => {
+    const favs = favoriteRecipes.filter(r => r.isfavorite && r.id !== undefined).map(supabaseToRecipe); // DB 필드명과 일치
+    return favs;
+  }, [favoriteRecipes]);
 
   // 즐겨찾기 레시피 refetch
   useEffect(() => {
@@ -75,7 +84,7 @@ export default function FavoritesPage({
       </div>
 
       {/* 즐겨찾기 레시피 목록 */}
-      {favoriteRecipes.length === 0 ? (
+      {recipes.length === 0 ? (
         <div className="text-center py-16 animate-fadeIn">
           <div className="w-24 h-24 mx-auto mb-6 bg-[#1a1a1a] rounded-full flex items-center justify-center">
             <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -94,11 +103,11 @@ export default function FavoritesPage({
       ) : (
         <div className="animate-fadeIn">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-gray-400 text-sm">{favoriteRecipes.length}개의 레시피</span>
+            <span className="text-gray-400 text-sm">{recipes.length}개의 레시피</span>
           </div>
           
           <div className="space-y-4">
-            {favoriteRecipes.map(recipe => (
+            {recipes.map(recipe => (
               <RecipeCard
                 key={recipe.id}
                 recipe={recipe}

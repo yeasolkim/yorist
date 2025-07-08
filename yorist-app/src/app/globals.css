@@ -92,6 +92,17 @@ body {
   user-select: none;
 }
 
+/* 서비스 전체 배경에 반투명 이미지 적용 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: url('/background.png') center center / cover no-repeat;
+  opacity: 0.3; /* 0.0(완전 투명) ~ 1.0(불투명) */
+  pointer-events: none;
+}
+
 /* 개선된 스크롤바 */
 ::-webkit-scrollbar {
   width: 6px;

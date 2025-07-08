@@ -42,25 +42,26 @@ export const isValidYouTubeUrl = (url: string): boolean => {
 };
 
 /**
- * 유튜브 비디오 ID 추출
+ * 유튜브 비디오 ID 추출 (파라미터가 붙은 URL도 지원)
  * @param url - 유튜브 URL
  * @returns 비디오 ID 또는 null
  */
 export const getYouTubeVideoId = (url: string): string | null => {
   if (!url) return null;
-  
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-    /youtube\.com\/watch\?.*v=([^&\n?#]+)/
-  ];
-  
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) {
-      return match[1];
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === 'youtu.be') {
+      // https://youtu.be/WWT8PjlQZgs?si=...
+      return parsed.pathname.replace('/', '').split('?')[0];
     }
+    if (parsed.hostname.includes('youtube.com')) {
+      return parsed.searchParams.get('v');
+    }
+  } catch {
+    // fallback: 정규식
+    const match = url.match(/(?:youtu\.be\/|v=)([\w-]{11})/);
+    if (match) return match[1];
   }
-  
   return null;
 };
 
@@ -71,6 +72,7 @@ export const getYouTubeVideoId = (url: string): string | null => {
  * @returns 썸네일 URL
  */
 export const getYouTubeThumbnail = (videoId: string, quality: 'default' | 'hq' | 'mq' | 'sd' | 'maxres' = 'hq'): string => {
+  if (!videoId) return '';
   return `https://img.youtube.com/vi/${videoId}/${quality}default.jpg`;
 };
 

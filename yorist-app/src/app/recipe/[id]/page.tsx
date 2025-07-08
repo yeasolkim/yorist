@@ -2,7 +2,7 @@
 import YoristHeader from '@/components/YoristHeader';
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Recipe, Ingredient, RecipeStep, RecipeIngredient } from '@/lib/types';
+import { Recipe, RecipeStep, RecipeIngredient } from '@/lib/types';
 import ManualRecipeForm from '@/components/ManualRecipeForm';
 import { recipeService, toDbIngredients } from '@/lib/supabase';
 import Link from 'next/link';
@@ -101,7 +101,7 @@ export default function RecipeDetailPage() {
       // merge: 레시피 재료 + 최신 shop_url
       const mergedIngredients = recipe.ingredients.map(ing => {
         const master = data?.find((row: any) => row.id === ing.ingredient_id);
-        return { ...ing, shopUrl: master?.shop_url || ing.shopUrl };
+        return { ...ing, shop_url: master?.shop_url || ing.shop_url };
       });
       setRecipe({ ...recipe, ingredients: mergedIngredients });
     };
@@ -126,7 +126,7 @@ export default function RecipeDetailPage() {
       .single();
     // 로컬 상태 갱신
     const updatedIngredients = recipe.ingredients.map(ing =>
-      ing.ingredient_id === ingredientId ? { ...ing, shopUrl: data?.shop_url || '' } : ing
+                ing.ingredient_id === ingredientId ? { ...ing, shop_url: data?.shop_url || '' } : ing
     );
     const updatedRecipe = { ...recipe, ingredients: updatedIngredients };
     setRecipe(updatedRecipe);
@@ -154,7 +154,7 @@ export default function RecipeDetailPage() {
         description: updated.description,
         ingredients: dbIngredients,
         steps: updated.steps,
-        videourl: updated.videoUrl || undefined,
+        videourl: updated.videourl || undefined,
         isfavorite: updated.isfavorite
       };
       const result = await recipeService.updateRecipe(updated.id, updateObj);
@@ -172,15 +172,9 @@ export default function RecipeDetailPage() {
     }
   };
 
-  // Ingredient[] → RecipeIngredient[] 변환 함수
-  function convertIngredientsToRecipeIngredients(ingredients: Ingredient[]) {
-    return ingredients.map(ing => ({
-      ingredient_id: ing.id || '',
-      name: ing.name,
-      amount: ing.amount,
-      unit: ing.unit,
-      shopUrl: ing.shopUrl
-    }));
+  // RecipeIngredient[] 변환 함수 (이미 올바른 형식이므로 단순히 반환)
+  function convertIngredientsToRecipeIngredients(ingredients: RecipeIngredient[]) {
+    return ingredients;
   }
 
   // 상세 페이지 내에서 재료 즐겨찾기 상태 관리
@@ -241,10 +235,10 @@ export default function RecipeDetailPage() {
         name: ing.name,
         amount: ing.amount,
         unit: ing.unit,
-        shopUrl: ing.shopUrl
+        shop_url: ing.shop_url || ing.shopUrl || '',
       })),
       steps: r.steps || [],
-      videoUrl: r.videoUrl,
+      videourl: r.videourl || '', // snake_case로 통일
       channel: r.channel,
       createdat: r.createdat ? new Date(r.createdat) : new Date(),
       isfavorite: r.isfavorite || false
@@ -264,7 +258,7 @@ export default function RecipeDetailPage() {
     const allIngredients = Object.values(ingredientMap);
 
     allIngredients.forEach(ing => {
-      if (ing.shopUrl) {
+      if (ing.shop_url) {
         commonIngredients.push(ing);
       } else {
         extraIngredients.push(ing);
@@ -287,7 +281,7 @@ export default function RecipeDetailPage() {
         .single()
         .then(({ data }) => {
           setIsFavorite(data?.is_favorite === 'true');
-          setIngredientInfo((prev) => ({ ...prev, shopUrl: data?.shop_url || prev.shopUrl }));
+          setIngredientInfo((prev) => ({ ...prev, shop_url: data?.shop_url || prev.shop_url }));
         });
     }, [ingredient.ingredient_id]);
     const toggleFavorite = async () => {
@@ -306,7 +300,7 @@ export default function RecipeDetailPage() {
         .eq('id', ingredient.ingredient_id)
         .single();
       setIsFavorite(data?.is_favorite === 'true');
-      setIngredientInfo((prev) => ({ ...prev, shopUrl: data?.shop_url || prev.shopUrl }));
+      setIngredientInfo((prev) => ({ ...prev, shop_url: data?.shop_url || prev.shop_url }));
     };
     return (
       <div>
@@ -317,9 +311,9 @@ export default function RecipeDetailPage() {
               <span className="text-white font-medium">{ingredientInfo.name}</span>
             </Link>
             {/* 구매하기 버튼을 수량/단위보다 왼쪽에 배치 */}
-            {ingredientInfo.shopUrl && (
+            {ingredientInfo.shop_url && (
               <a
-                href={ingredientInfo.shopUrl?.startsWith('http') ? ingredientInfo.shopUrl : `https://${ingredientInfo.shopUrl}`}
+                href={ingredientInfo.shop_url?.startsWith('http') ? ingredientInfo.shop_url : `https://${ingredientInfo.shop_url}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center px-2 py-1.5 bg-orange-500 text-white rounded-full text-xs font-bold hover:bg-orange-600 transition shadow whitespace-nowrap"
@@ -415,24 +409,22 @@ export default function RecipeDetailPage() {
       ) : (
         <>
           {/* 레시피 제목 - 심플하게 상단에만 표시 */}
-          <div className="mb-3 sm:mb-4">
-            <div className="flex items-center gap-2 sm:gap-3">
-              {/* 뒤로가기 버튼 - 제목 왼쪽 */}
-              <button
-                onClick={() => router.back()}
-                className="mr-2 p-1 rounded-full bg-[#232323] hover:bg-[#2a2a2a] text-white flex items-center justify-center focus:outline-none"
-                aria-label="뒤로가기"
-                style={{ minWidth: 32, minHeight: 32 }}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <div className="flex-1 flex flex-col items-center">
-                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight text-center">{recipe.title}</h1>
-                {/* 주황색 밑줄(50% 길이, 중앙)로 강조 */}
-                <div className="w-1/2 h-[2.5px] bg-gradient-to-r from-orange-400 to-orange-500 rounded-full mx-auto mt-2" aria-hidden="true"></div>
-              </div>
+          <div className="mb-3 sm:mb-4 relative">
+            {/* 뒤로가기 버튼을 absolute로 배치 */}
+            <button
+              onClick={() => router.back()}
+              className="absolute left-0 top-1/2 -translate-y-1/2 p-1 rounded-full bg-[#232323] hover:bg-[#2a2a2a] text-white flex items-center justify-center focus:outline-none"
+              aria-label="뒤로가기"
+              style={{ minWidth: 32, minHeight: 32 }}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            {/* 제목과 밑줄을 flex-col + items-center로 중앙 정렬 */}
+            <div className="flex flex-col items-center w-full">
+              <h1 className="text-lg sm:text-xl font-bold text-white leading-tight text-center">{recipe.title}</h1>
+              <div className="w-1/2 h-[2.5px] bg-gradient-to-r from-orange-400 to-orange-500 rounded-full mx-auto mt-2" aria-hidden="true"></div>
             </div>
           </div>
           
@@ -440,31 +432,44 @@ export default function RecipeDetailPage() {
           <div className="mb-1 sm:mb-4 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg sm:rounded-2xl shadow-lg overflow-hidden">
             {/* 이미지 썸네일 */}
             <div className="relative w-full aspect-video">
-              {recipe.videoUrl && isValidYouTubeUrl(recipe.videoUrl) ? (
-                <img
-                  src={getYouTubeThumbnail(getYouTubeVideoId(recipe.videoUrl) || '', 'hq')}
-                  alt="유튜브 썸네일"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full bg-[#232323] flex items-center justify-center text-gray-500 text-base sm:text-lg">
-                  대표 이미지 없음
-                </div>
-              )}
+              {/* 유튜브 썸네일 렌더링 - DB 필드명과 일치: videoUrl 또는 videourl 모두 지원 */}
+              {(() => {
+                const videoUrl = recipe.videourl || '';
+                const videoId = getYouTubeVideoId(videoUrl);
+                const thumbnailUrl = videoId ? getYouTubeThumbnail(videoId, 'hq') : '';
+                if (videoUrl && videoId && thumbnailUrl) {
+                  return (
+                    <img
+                      src={thumbnailUrl}
+                      alt="유튜브 썸네일"
+                      className="w-full h-full object-cover"
+                    />
+                  );
+                } else {
+                  return (
+                    <div className="w-full h-full bg-[#232323] flex items-center justify-center text-gray-500 text-base sm:text-lg">
+                      대표 이미지 없음
+                    </div>
+                  );
+                }
+              })()}
               {/* 유튜브 바로가기 버튼은 유지 */}
-              {recipe.videoUrl && isValidYouTubeUrl(recipe.videoUrl) && (
-                <a
-                  href={recipe.videoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 bg-red-600 text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-2 shadow-lg hover:bg-red-700 transition-colors text-xs sm:text-sm font-bold"
-                >
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M10 15l5.19-3L10 9v6zm12-3c0-5.52-4.48-10-10-10S2 6.48 2 12s4.48 10 10 10 10-4.48 10-10zm-2 0c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8 8 3.58 8 8z" />
-                  </svg>
-                  유튜브에서 보기
-                </a>
-              )}
+              {(() => {
+                const videoUrl = recipe.videourl || '';
+                return videoUrl && getYouTubeVideoId(videoUrl) ? (
+                  <a
+                    href={videoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 bg-red-600 text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-2 shadow-lg hover:bg-red-700 transition-colors text-xs sm:text-sm font-bold"
+                  >
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M10 15l5.19-3L10 9v6zm12-3c0-5.52-4.48-10-10-10S2 6.48 2 12s4.48 10 10 10 10-4.48 10-10zm-2 0c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8 8 3.58 8 8z" />
+                    </svg>
+                    유튜브에서 보기
+                  </a>
+                ) : null;
+              })()}
             </div>
             {/* 레시피 설명 토글 - 여백 더 축소 */}
             {recipe.description && (
@@ -518,9 +523,9 @@ export default function RecipeDetailPage() {
                         {/* 버튼 그룹 - 오른쪽 끝에 고정, 위치 조정 */}
                         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 items-center">
                           {/* 장바구니 버튼 - 하트 왼쪽 */}
-                          {ingredient.shopUrl && (
+                          {ingredient.shop_url && (
                             <a
-                              href={ingredient.shopUrl?.startsWith('http') ? ingredient.shopUrl : `https://${ingredient.shopUrl}`}
+                              href={ingredient.shop_url?.startsWith('http') ? ingredient.shop_url : `https://${ingredient.shop_url}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex items-center justify-center p-0.5 border border-orange-400 text-orange-500 rounded-full hover:bg-orange-50 transition"
@@ -664,7 +669,8 @@ export default function RecipeDetailPage() {
                   <div className="bg-black border border-[#232323] rounded-lg sm:rounded-2xl p-3 sm:p-6 text-gray-500 text-center">관련 레시피가 없습니다</div>
                 ) : (
                   <div className="flex flex-col gap-2 sm:gap-4">
-                    {related.map((rel: any) => (
+                    {/* 관련 레시피는 최대 5개만 표시 */}
+                    {related.slice(0, 5).map((rel: any) => (
                       <Link key={rel.id} href={`/recipe/${rel.id}`} passHref legacyBehavior>
                         <a style={{ display: 'block' }}>
                           <div className="bg-black border border-[#232323] rounded-lg sm:rounded-2xl p-3 sm:p-5 hover:border-orange-400 transition cursor-pointer">

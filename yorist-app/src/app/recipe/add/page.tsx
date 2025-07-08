@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Recipe, Ingredient, RecipeStep, RecipeIngredient } from '@/lib/types';
+import { Recipe, RecipeStep, RecipeIngredient } from '@/lib/types';
 import { createClient } from '@supabase/supabase-js';
 
 // Supabase 클라이언트 준비
@@ -15,7 +15,7 @@ export default function AddRecipePage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    videoUrl: ''
+    videourl: ''
   });
 
   // 재료 목록 상태
@@ -26,7 +26,7 @@ export default function AddRecipePage() {
     name: '',
     amount: '',
     unit: '',
-    shopUrl: ''
+    shop_url: ''
   });
 
   // 자동완성 후보 상태
@@ -81,32 +81,22 @@ export default function AddRecipePage() {
   // 재료 추가 핸들러에서 RecipeIngredient 타입으로 저장
   const handleAddIngredient = async () => {
     if (!newIngredient.name.trim()) return;
-    // ingredients_master에 이미 있는 재료인지 확인
-    const { data: existing } = await supabase
-      .from('ingredients_master')
-      .select('id')
-      .eq('name', newIngredient.name)
-      .single();
-    if (existing) {
-      // 이미 있으면 shop_url만 update
-      await supabase
-        .from('ingredients_master')
-        .update({ shop_url: newIngredient.shopUrl })
-        .eq('id', existing.id);
-    } else {
-      // 없으면 새로 insert
+    // ingredient_id가 있으면 그대로 사용, 없으면 새로 추가
+    let ingredientId = newIngredient.ingredient_id;
+    if (!ingredientId) {
+      // 새 재료 추가
       const { data: inserted } = await supabase
         .from('ingredients_master')
-        .insert({ name: newIngredient.name, unit: newIngredient.unit, shop_url: newIngredient.shopUrl })
+        .insert({ name: newIngredient.name, unit: newIngredient.unit, shop_url: newIngredient.shop_url })
         .select()
         .single();
       if (inserted) {
-        setNewIngredient({ ...newIngredient, ingredient_id: inserted.id });
+        ingredientId = inserted.id;
       }
     }
     // 기존 로컬 재료 목록에 추가
-    setIngredients([...ingredients, newIngredient]);
-    setNewIngredient({ ingredient_id: '', name: '', amount: '', unit: '', shopUrl: '' });
+    setIngredients([...ingredients, { ...newIngredient, ingredient_id: ingredientId }]);
+    setNewIngredient({ ingredient_id: '', name: '', amount: '', unit: '', shop_url: '' });
   };
 
   // 재료 삭제 핸들러
@@ -146,13 +136,13 @@ export default function AddRecipePage() {
           name: ing.name,
           amount: ing.amount,
           unit: ing.unit,
-          shopUrl: ing.shopUrl
+          shop_url: ing.shop_url
         })),
         steps: steps.map(step => ({
           description: step.description,
           isImportant: step.isImportant || false
         })),
-        videoUrl: formData.videoUrl.trim() || null,
+        videourl: formData.videourl.trim() || null,
         channel: null,
         tags: [],
         isVegetarian: false,
@@ -186,10 +176,10 @@ export default function AddRecipePage() {
   const handleSaveRecipe = async (recipe: Recipe) => {
     // 재료별로 shopUrl이 변경된 경우 update
     for (const ing of recipe.ingredients) {
-      if (ing.ingredient_id && ing.shopUrl) {
+      if (ing.ingredient_id && ing.shop_url) {
         await supabase
           .from('ingredients_master')
-          .update({ shop_url: ing.shopUrl })
+          .update({ shop_url: ing.shop_url })
           .eq('id', ing.ingredient_id);
       }
     }
@@ -261,20 +251,20 @@ export default function AddRecipePage() {
               </label>
               <input
                 type="url"
-                value={formData.videoUrl}
-                onChange={(e) => setFormData({...formData, videoUrl: e.target.value})}
+                value={formData.videourl}
+                onChange={(e) => setFormData({...formData, videourl: e.target.value})}
                 className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-[#232323] border border-[#333] text-white rounded-lg sm:rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition text-sm sm:text-base"
                 placeholder="https://www.youtube.com/watch?v=..."
               />
               {/* 유튜브 미리보기 */}
-              {formData.videoUrl && getYouTubeEmbedUrl(formData.videoUrl) && (
+              {formData.videourl && getYouTubeEmbedUrl(formData.videourl) && (
                 <div className="mt-2 sm:mt-3">
                   <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">
                     미리보기
                   </label>
                   <div className="relative w-full h-32 sm:h-48 bg-[#232323] rounded-lg sm:rounded-xl overflow-hidden">
                     <iframe
-                      src={getYouTubeEmbedUrl(formData.videoUrl)}
+                      src={getYouTubeEmbedUrl(formData.videourl)}
                       className="w-full h-full"
                       frameBorder="0"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -314,7 +304,7 @@ export default function AddRecipePage() {
                             name: item.name,
                             amount: '',
                             unit: item.unit || '',
-                            shopUrl: item.shop_url || '' // 구매링크 자동입력
+                            shop_url: item.shop_url || '' // 구매링크 자동입력
                           });
                           setShowDropdown(false);
                         }}
@@ -345,8 +335,8 @@ export default function AddRecipePage() {
               {/* 구매링크 입력란 */}
               <input
                 type="text"
-                value={newIngredient.shopUrl}
-                onChange={e => setNewIngredient({ ...newIngredient, shopUrl: e.target.value })}
+                value={newIngredient.shop_url}
+                onChange={e => setNewIngredient({ ...newIngredient, shop_url: e.target.value })}
                 className="px-3 sm:px-4 py-2 sm:py-3 bg-[#232323] border border-[#333] text-white rounded-lg sm:rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition w-full col-span-2 text-sm sm:text-base"
                 placeholder="구매 링크 (선택)"
               />
@@ -365,8 +355,8 @@ export default function AddRecipePage() {
                   <div className="flex items-center space-x-2">
                     <span className="font-medium text-white text-xs sm:text-sm">{ingredient.name}</span>
                     <span className="text-gray-400 text-xs sm:text-sm">{ingredient.amount} {ingredient.unit}</span>
-                    {ingredient.shopUrl && (
-                      <a href={ingredient.shopUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-orange-400 underline text-xs">구매</a>
+                    {ingredient.shop_url && (
+                      <a href={ingredient.shop_url} target="_blank" rel="noopener noreferrer" className="ml-2 text-orange-400 underline text-xs">구매</a>
                     )}
                   </div>
                   <button

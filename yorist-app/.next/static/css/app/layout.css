@@ -538,9 +538,6 @@ video {
 .right-4 {
   right: 1rem;
 }
-.top-0 {
-  top: 0px;
-}
 .top-1\/2 {
   top: 50%;
 }
@@ -604,9 +601,6 @@ video {
 }
 .ml-auto {
   margin-left: auto;
-}
-.mr-1 {
-  margin-right: 0.25rem;
 }
 .mr-2 {
   margin-right: 0.5rem;
@@ -1312,6 +1306,10 @@ video {
   --tw-text-opacity: 1;
   color: rgb(249 115 22 / var(--tw-text-opacity, 1));
 }
+.text-primary {
+  --tw-text-opacity: 1;
+  color: rgb(255 107 53 / var(--tw-text-opacity, 1));
+}
 .text-red-200 {
   --tw-text-opacity: 1;
   color: rgb(254 202 202 / var(--tw-text-opacity, 1));
@@ -1504,6 +1502,17 @@ body {
   -webkit-user-select: none;
   -moz-user-select: none;
        user-select: none;
+}
+
+/* 서비스 전체 배경에 반투명 이미지 적용 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: url('/background.png') center center / cover no-repeat;
+  opacity: 0.3; /* 0.0(완전 투명) ~ 1.0(불투명) */
+  pointer-events: none;
 }
 
 /* 개선된 스크롤바 */

@@ -152,7 +152,7 @@ export default function IngredientDetailPage() {
                 구매하러 가기
               </a>
               <button
-                onClick={() => { setShopUrlInput(ingredient.shop_url); setShowShopUrlEdit(true); }}
+                onClick={() => { setShopUrlInput(ingredient.shop_url || ''); setShowShopUrlEdit(true); }}
                 className="px-4 py-2 bg-[#232323] text-orange-400 rounded-full text-sm font-bold border border-orange-400 hover:bg-orange-500 hover:text-white transition"
               >
                 구매링크 수정

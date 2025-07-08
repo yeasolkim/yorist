@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Recipe, Ingredient, RecipeStep } from '@/lib/types';
+import { Recipe, RecipeStep } from '@/lib/types';
 import { createClient } from '@supabase/supabase-js';
 import RecipeGeneratePage from './RecipeGeneratePage';
 import ManualRecipeForm from './ManualRecipeForm';
@@ -20,7 +20,7 @@ export default function AddRecipeForm({ onSave, onCancel }: AddRecipeFormProps) 
   
   // 단계 상태: 'input' | 'generate' | 'manual'
   const [step, setStep] = useState<'input' | 'generate' | 'manual'>('input');
-  const [videoUrl, setVideoUrl] = useState('');
+  const [videourl, setVideourl] = useState('');
   const [transcript, setTranscript] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -36,7 +36,7 @@ export default function AddRecipeForm({ onSave, onCancel }: AddRecipeFormProps) 
   const handleAnalyze = async () => {
     setError('');
     setLoading(true);
-    const videoId = extractVideoId(videoUrl);
+    const videoId = extractVideoId(videourl);
     if (!videoId) {
       setError('유효한 유튜브 링크를 입력하세요.');
       setLoading(false);
@@ -76,14 +76,14 @@ export default function AddRecipeForm({ onSave, onCancel }: AddRecipeFormProps) 
           name: ing.name,
           amount: ing.amount,
           unit: ing.unit,
-          shop_url: ing.shopUrl || "",
+          shop_url: ing.shop_url || "",
           is_favorite: "false"
         })),
         steps: recipe.steps.map(step => ({
           description: step.description,
           isImportant: step.isImportant ?? false
         })),
-        videourl: recipe.videoUrl || null,
+        videourl: recipe.videourl || null,
         createdat: new Date().toISOString(),
         isfavorite: "false"
       };
@@ -104,7 +104,7 @@ export default function AddRecipeForm({ onSave, onCancel }: AddRecipeFormProps) 
         onSave(recipe);
       }
       setStep('input');
-      setVideoUrl('');
+      setVideourl('');
       setTranscript('');
       router.push('/');
     } catch (error) {
@@ -135,7 +135,7 @@ export default function AddRecipeForm({ onSave, onCancel }: AddRecipeFormProps) 
       description: '',
       ingredients: [],
       steps: [],
-      videoUrl: videoUrl || undefined,
+      videourl: videourl || undefined,
       createdat: new Date(),
       isfavorite: false
     };
@@ -156,8 +156,8 @@ export default function AddRecipeForm({ onSave, onCancel }: AddRecipeFormProps) 
         <div className="w-full mb-6">
           <input
             type="text"
-            value={videoUrl}
-            onChange={e => setVideoUrl(e.target.value)}
+            value={videourl}
+            onChange={e => setVideourl(e.target.value)}
             className="w-full bg-[#181818] border border-[#232323] text-white placeholder:text-placeholder rounded-2xl px-5 py-4 focus:border-primary focus:ring-2 focus:ring-primary outline-none transition min-h-[52px] text-base"
             placeholder="유튜브 또는 인스타그램 링크 붙여넣기"
           />

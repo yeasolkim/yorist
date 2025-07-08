@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Recipe } from '@/lib/types';
-import { recipeService, SupabaseRecipe } from '@/lib/supabase';
+import { recipeService } from '@/lib/supabase';
 import { saveRecipeAsync, getRecipesAsync } from '@/lib/recipeUtils';
 
 interface SupabaseRecipeManagerProps {
@@ -89,24 +89,30 @@ export default function SupabaseRecipeManager({
   const handleToggleFavorite = async (recipeId: string, currentFavorite: boolean) => {
     try {
       const success = await recipeService.toggleFavorite(recipeId, !currentFavorite);
-      
       if (success) {
-        // 토글 성공 시 목록 업데이트
-        setRecipes(prev => prev.map(recipe => 
-          recipe.id === recipeId 
-            ? { ...recipe, isfavorite: !currentFavorite }
-            : recipe
-        ));
-        setError('');
-      } else {
-        throw new Error('즐겨찾기 토글에 실패했습니다.');
+        // 성공 시 레시피 목록 새로고침
+        const updatedRecipes = await recipeService.getAllRecipes();
+        setRecipes(updatedRecipes);
       }
-    } catch (err) {
-      const errorMessage = '즐겨찾기 토글에 실패했습니다.';
-      setError(errorMessage);
-      onError?.(errorMessage);
+    } catch (error) {
+      console.error('즐겨찾기 토글 실패:', error);
     }
   };
+
+  // 레시피 변환 함수 (DB 필드명과 일치)
+  const supabaseToRecipe = (recipe: any): Recipe => ({
+    id: recipe.id,
+    title: recipe.title,
+    description: recipe.description,
+    ingredients: recipe.ingredients || [],
+    steps: recipe.steps || [],
+    videourl: recipe.videourl || '', // DB 필드명과 일치
+    channel: recipe.channel || '',
+    tags: recipe.tags || [],
+    isVegetarian: recipe.isVegetarian || false,
+    createdat: new Date(recipe.createdat!), // DB 필드명과 일치
+    isfavorite: recipe.isfavorite ?? false // DB 필드명과 일치
+  });
 
   // 레시피 검색
   const handleSearchRecipes = async (searchTerm: string) => {
@@ -119,7 +125,7 @@ export default function SupabaseRecipeManager({
         description: recipe.description,
         ingredients: recipe.ingredients,
         steps: recipe.steps,
-        videoUrl: recipe.videoUrl,
+        videourl: recipe.videourl,
         channel: recipe.channel,
         tags: recipe.tags,
         isVegetarian: recipe.isVegetarian,
