@@ -41,14 +41,14 @@ export default function RecipeCard({
           const thumbnailUrl = videoId ? getYouTubeThumbnail(videoId, 'hq') : '';
           if (thumbnailUrl) {
             return (
-              <div className="flex-shrink-0 mr-2 sm:mr-3">
-                <img
-                  src={thumbnailUrl}
-                  alt="유튜브 썸네일"
-                  className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg sm:rounded-xl border border-[#333] shadow-sm"
-                  style={{ minWidth: 64, minHeight: 64 }}
-                />
-              </div>
+          <div className="flex-shrink-0 mr-2 sm:mr-3">
+            <img
+              src={thumbnailUrl}
+              alt="유튜브 썸네일"
+              className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg sm:rounded-xl border border-[#333] shadow-sm"
+              style={{ minWidth: 64, minHeight: 64 }}
+            />
+          </div>
             );
           } else {
             return (

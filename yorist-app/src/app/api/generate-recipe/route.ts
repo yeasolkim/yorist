@@ -97,4 +97,4 @@ export async function POST(req: NextRequest) {
     console.error('[generate-recipe] 알 수 없는 예외:', error);
     return NextResponse.json({ error: '요청 처리 중 오류가 발생했습니다.' }, { status: 500 });
   }
-}
+} 

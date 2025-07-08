@@ -96,7 +96,7 @@ export default function SupabaseRecipeManager({
       }
     } catch (error) {
       console.error('즐겨찾기 토글 실패:', error);
-    }
+      }
   };
 
   // 레시피 변환 함수 (DB 필드명과 일치)

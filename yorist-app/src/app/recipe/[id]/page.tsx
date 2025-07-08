@@ -411,20 +411,20 @@ export default function RecipeDetailPage() {
           {/* 레시피 제목 - 심플하게 상단에만 표시 */}
           <div className="mb-3 sm:mb-4 relative">
             {/* 뒤로가기 버튼을 absolute로 배치 */}
-            <button
-              onClick={() => router.back()}
+              <button
+                onClick={() => router.back()}
               className="absolute left-0 top-1/2 -translate-y-1/2 p-1 rounded-full bg-[#232323] hover:bg-[#2a2a2a] text-white flex items-center justify-center focus:outline-none"
-              aria-label="뒤로가기"
-              style={{ minWidth: 32, minHeight: 32 }}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
+                aria-label="뒤로가기"
+                style={{ minWidth: 32, minHeight: 32 }}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
             {/* 제목과 밑줄을 flex-col + items-center로 중앙 정렬 */}
             <div className="flex flex-col items-center w-full">
-              <h1 className="text-lg sm:text-xl font-bold text-white leading-tight text-center">{recipe.title}</h1>
-              <div className="w-1/2 h-[2.5px] bg-gradient-to-r from-orange-400 to-orange-500 rounded-full mx-auto mt-2" aria-hidden="true"></div>
+                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight text-center">{recipe.title}</h1>
+                <div className="w-1/2 h-[2.5px] bg-gradient-to-r from-orange-400 to-orange-500 rounded-full mx-auto mt-2" aria-hidden="true"></div>
             </div>
           </div>
           
@@ -441,15 +441,15 @@ export default function RecipeDetailPage() {
                   return (
                     <img
                       src={thumbnailUrl}
-                      alt="유튜브 썸네일"
-                      className="w-full h-full object-cover"
-                    />
+                  alt="유튜브 썸네일"
+                  className="w-full h-full object-cover"
+                />
                   );
                 } else {
                   return (
-                    <div className="w-full h-full bg-[#232323] flex items-center justify-center text-gray-500 text-base sm:text-lg">
-                      대표 이미지 없음
-                    </div>
+                <div className="w-full h-full bg-[#232323] flex items-center justify-center text-gray-500 text-base sm:text-lg">
+                  대표 이미지 없음
+                </div>
                   );
                 }
               })()}
@@ -457,17 +457,17 @@ export default function RecipeDetailPage() {
               {(() => {
                 const videoUrl = recipe.videourl || '';
                 return videoUrl && getYouTubeVideoId(videoUrl) ? (
-                  <a
+                <a
                     href={videoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 bg-red-600 text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-2 shadow-lg hover:bg-red-700 transition-colors text-xs sm:text-sm font-bold"
-                  >
-                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M10 15l5.19-3L10 9v6zm12-3c0-5.52-4.48-10-10-10S2 6.48 2 12s4.48 10 10 10 10-4.48 10-10zm-2 0c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8 8 3.58 8 8z" />
-                    </svg>
-                    유튜브에서 보기
-                  </a>
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 bg-red-600 text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-2 shadow-lg hover:bg-red-700 transition-colors text-xs sm:text-sm font-bold"
+                >
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M10 15l5.19-3L10 9v6zm12-3c0-5.52-4.48-10-10-10S2 6.48 2 12s4.48 10 10 10 10-4.48 10-10zm-2 0c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8 8 3.58 8 8z" />
+                  </svg>
+                  유튜브에서 보기
+                </a>
                 ) : null;
               })()}
             </div>

@@ -15,6 +15,7 @@ import RecipeCard from '@/components/RecipeCard';
 import ManualRecipeForm from '@/components/ManualRecipeForm';
 import { recipeService } from '@/lib/supabase';
 import CookingLoader from '@/components/CookingLoader';
+import BackgroundImage from '@/components/BackgroundImage';
 
 export default function HomePage() {
   const router = useRouter();
@@ -257,7 +258,10 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-black pb-28">
+    <div className="relative min-h-screen bg-black">
+      {/* 전체 탭 공통 반투명 배경 이미지 */}
+      <BackgroundImage />
+      {/* 실제 내용 */}
       <YoristHeader />
       {/* ManualRecipeForm 모달 오버레이 */}
       {showManualForm && (

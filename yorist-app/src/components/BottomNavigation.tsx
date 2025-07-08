@@ -55,7 +55,8 @@ export default function BottomNavigation({
   };
   
   return (
-    <nav className="fixed bottom-0 left-0 w-full z-50 bg-[#1a1a1a]/95 backdrop-blur-xl border-t border-[#2a2a2a] px-2 sm:px-4 pb-2 sm:pb-4 pb-[env(safe-area-inset-bottom)]">
+    // 하단 네비게이션 배경을 완전 투명하게 변경
+    <nav className="fixed bottom-0 left-0 w-full z-50 bg-transparent border-t border-[#2a2a2a] px-2 sm:px-4 pb-2 sm:pb-4 pb-[env(safe-area-inset-bottom)]">
       <div className="flex justify-around items-center h-12 sm:h-16 max-w-md mx-auto">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;

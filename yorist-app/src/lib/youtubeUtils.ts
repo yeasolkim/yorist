@@ -61,7 +61,7 @@ export const getYouTubeVideoId = (url: string): string | null => {
     // fallback: 정규식
     const match = url.match(/(?:youtu\.be\/|v=)([\w-]{11})/);
     if (match) return match[1];
-  }
+    }
   return null;
 };
 
