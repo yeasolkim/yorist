@@ -33,7 +33,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
 
   // 상태 추가
   const [channel, setChannel] = useState(initialRecipe?.channel || '');
-  const [videoUrl, setVideoUrl] = useState(initialRecipe?.videoUrl || '');
+  const [videourl, setVideourl] = useState(initialRecipe?.videourl || '');
 
   // 재료 수정 상태
   const [editingIngredientIdx, setEditingIngredientIdx] = useState<number | null>(null);
@@ -250,7 +250,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
         description: description.trim(),
         ingredients,
         steps: steps.map(s => ({ description: s.description, isImportant: s.isImportant })),
-        videoUrl: videoUrl.trim() || undefined,
+        videourl: videourl.trim() || undefined,
         channel: channel.trim() || undefined,
         tags: initialRecipe?.tags || [],
         isVegetarian: initialRecipe?.isVegetarian || false,
@@ -278,7 +278,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
           description: step.description,
           isImportant: step.isImportant ?? false
         })),
-        videourl: videoUrl.trim() || null,
+        videourl: videourl.trim() || null,
         createdat: initialRecipe?.createdat || new Date().toISOString(),
         isfavorite: "false"
       };
@@ -301,7 +301,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
         description: description.trim(),
         ingredients,
         steps: steps.map(s => ({ description: s.description, isImportant: s.isImportant })),
-        videoUrl: videoUrl.trim() || undefined,
+        videourl: videourl.trim() || undefined,
         channel: channel.trim() || undefined,
         tags: initialRecipe?.tags || [],
         isVegetarian: initialRecipe?.isVegetarian || false,
@@ -396,8 +396,8 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
             <label className="block text-white font-medium mb-2">유튜브 링크</label>
             <input
               type="text"
-              value={videoUrl}
-              onChange={e => setVideoUrl(e.target.value)}
+              value={videourl}
+              onChange={e => setVideourl(e.target.value)}
               placeholder="https://youtube.com/..."
               className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-4 py-3 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 min-h-[44px]"
             />
