@@ -13,21 +13,21 @@ const processIngredients = async (ingredients: RecipeIngredient[]): Promise<Reci
       let ingredientId = ingredient.ingredient_id;
       // ingredient_id가 있으면 그대로 사용, 없으면 새로 추가
       if (!ingredientId) {
-        // ingredient_id가 없으면 새로 추가
-        const { data: newIngredient, error } = await supabase
+        // ingredient_id가 없으면 새로 추가 (중복 시 무시)
+        const { data: upsertedIngredient, error } = await supabase
           .from('ingredients_master')
-          .insert({
+          .upsert({
             name: ingredient.name,
             unit: ingredient.unit || '개',
             shop_url: ingredient.shop_url || null, // DB 필드명과 일치 (snake_case)
             is_favorite: false // DB 필드명과 일치 (snake_case)
-          })
+          }, { onConflict: 'name' }) // name이 중복될 경우 insert 무시
           .select('id')
           .single();
         if (error) {
-          console.error('재료 추가 실패:', error);
+          console.error('재료 추가(upsert) 실패:', error); // 한글 에러 메시지
         } else {
-          ingredientId = newIngredient.id;
+          ingredientId = upsertedIngredient.id;
         }
       }
       processedIngredients.push({

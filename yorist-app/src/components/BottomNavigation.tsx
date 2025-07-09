@@ -55,8 +55,8 @@ export default function BottomNavigation({
   };
   
   return (
-    // 하단 네비게이션 배경을 완전 투명하게 변경
-    <nav className="fixed bottom-0 left-0 w-full z-50 bg-transparent border-t border-[#2a2a2a] px-2 sm:px-4 pb-2 sm:pb-4 pb-[env(safe-area-inset-bottom)]">
+    // 하단 네비게이션 바 배경을 불투명하게 변경
+    <nav className="fixed bottom-0 left-0 w-full z-50 bg-[#1a1a1a]/95 backdrop-blur-xl border-t border-[#2a2a2a] px-2 sm:px-4 pb-2 sm:pb-4 pb-[env(safe-area-inset-bottom)]">
       <div className="flex justify-around items-center h-12 sm:h-16 max-w-md mx-auto">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -74,7 +74,7 @@ export default function BottomNavigation({
             >
               {/* 활성 상태 배경 */}
               {isActive && (
-                <div className="absolute inset-0 bg-orange-400/10 rounded-xl -m-1 animate-scaleIn" />
+                <div className="absolute inset-0 bg-orange-400/10 rounded-xl animate-scaleIn" />
               )}
               
               <div className="relative flex items-center justify-center mb-0.5 sm:mb-1">

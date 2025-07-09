@@ -145,7 +145,10 @@ export default function SearchPage({
                 className="px-4 py-2 rounded-full bg-[#2a2a2a] text-orange-400 text-sm font-medium hover:bg-[#3a3a3a] hover:text-orange-300 transition-all duration-200 border border-[#3a3a3a] hover:border-orange-400/30 min-h-[44px]"
                 onClick={() => handleSearch(keyword)}
               >
-                {keyword}
+                {/* 10글자 이상은 ...으로 표시 */}
+                {Array.from(keyword).length > 10
+                  ? Array.from(keyword).slice(0, 10).join('') + '...'
+                  : keyword}
               </button>
             ))}
           </div>
@@ -168,10 +171,11 @@ export default function SearchPage({
                         href={item.shop_url} 
                         target="_blank" 
                         rel="noopener noreferrer" 
-                        className="flex items-center justify-center p-0.5 border border-orange-400 text-orange-500 rounded-full hover:bg-orange-50 transition"
+                        className="flex items-center justify-center text-white hover:text-orange-400 transition"
                         aria-label="구매링크"
                         onClick={e => e.stopPropagation()}
                       >
+                        {/* 장바구니 아이콘만 표시, 테두리/배경 없음 */}
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                           <path d="M3 3h2l.4 2M7 13h10l4-8H5.4" strokeLinecap="round" strokeLinejoin="round"/>
                           <circle cx="9" cy="21" r="1" />

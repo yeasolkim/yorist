@@ -528,13 +528,13 @@ export default function RecipeDetailPage() {
                               href={ingredient.shop_url?.startsWith('http') ? ingredient.shop_url : `https://${ingredient.shop_url}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex items-center justify-center p-0.5 border border-orange-400 text-orange-500 rounded-full hover:bg-orange-50 transition"
+                              className="flex items-center justify-center text-white hover:text-orange-400 transition"
                               aria-label="구매링크"
                               style={{ lineHeight: '1.2' }}
                               onClick={e => e.stopPropagation()}
                               tabIndex={-1}
                             >
-                              {/* 장바구니 아이콘 */}
+                              {/* 장바구니 아이콘만 표시, 테두리/배경 없음 */}
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                 <path d="M3 3h2l.4 2M7 13h10l4-8H5.4" strokeLinecap="round" strokeLinejoin="round"/>
                                 <circle cx="9" cy="21" r="1" />

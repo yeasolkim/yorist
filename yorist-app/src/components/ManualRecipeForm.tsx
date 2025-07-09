@@ -22,6 +22,18 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>(initialRecipe?.ingredients || []);
   const [steps, setSteps] = useState<RecipeStep[]>(initialRecipe?.steps || []);
   
+  // 초기 레시피 데이터에서 재료의 ingredient_id 확인 및 설정
+  useEffect(() => {
+    if (initialRecipe?.ingredients && initialRecipe.ingredients.length > 0) {
+      console.log('[ManualRecipeForm] 초기 재료 데이터 확인:', initialRecipe.ingredients);
+      // 이미 ingredient_id가 설정되어 있는지 확인
+      const hasValidIds = initialRecipe.ingredients.every(ing => ing.ingredient_id);
+      if (!hasValidIds) {
+        console.log('[ManualRecipeForm] 일부 재료에 ingredient_id가 없음, 매칭 시도');
+      }
+    }
+  }, [initialRecipe]);
+  
   // 재료 입력 상태
   const [ingredientName, setIngredientName] = useState('');
   const [ingredientAmount, setIngredientAmount] = useState('');
@@ -49,10 +61,19 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
   const handleAddIngredient = async () => {
     if (!ingredientName.trim() || !ingredientAmount.trim()) return;
     try {
-      let ingredientId = '';
-      // ingredient_id가 있으면 그대로 사용, 없으면 새로 추가
-      // name으로는 더 이상 조회하지 않음
-      if (!ingredientId) {
+      let finalIngredientId = ingredientId;
+      // ingredientId가 없으면 name으로 DB에서 id 조회 (ilike)
+      if (!finalIngredientId) {
+        const { data: existing, error: fetchError } = await supabase
+          .from('ingredients_master')
+          .select('id')
+          .ilike('name', ingredientName.trim())
+          .single();
+        if (existing && existing.id) {
+          finalIngredientId = existing.id;
+        }
+      }
+      if (!finalIngredientId) {
         // 새 재료 추가
         const { data: newIngredient, error } = await supabase
           .from('ingredients_master')
@@ -69,21 +90,18 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
           alert('재료 추가에 실패했습니다.');
           return;
         }
-        ingredientId = newIngredient.id;
+        finalIngredientId = newIngredient.id;
       }
       const newIngredient: RecipeIngredient = {
-        ingredient_id: ingredientId,
+        ingredient_id: String(finalIngredientId),
         name: ingredientName.trim(),
         amount: ingredientAmount.trim(),
         unit: ingredientUnit.trim() || '개',
         shop_url: ingredientShopUrl.trim() || undefined
       };
       setIngredients(prev => [...prev, newIngredient]);
-      setIngredientName('');
-      setIngredientAmount('');
-      setIngredientUnit('');
-      setIngredientShopUrl('');
-      triggerIngredientSync(); // 동기화 트리거
+      setIngredientName(''); setIngredientAmount(''); setIngredientUnit(''); setIngredientShopUrl(''); setIngredientId('');
+      triggerIngredientSync();
     } catch (error) {
       console.error('재료 추가 중 오류:', error);
       alert('재료 추가 중 오류가 발생했습니다.');
@@ -171,9 +189,9 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
         name: editIngredientName,
         amount: editIngredientAmount,
         unit: editIngredientUnit,
-        shop_url: editIngredientShopUrl
+        shop_url: editIngredientShopUrl,
+        ingredient_id: editIngredientId || originalIngredient.ingredient_id
       };
-
       // ingredients_master 테이블 업데이트 (재료명이 변경된 경우)
       if (originalIngredient.ingredient_id && originalIngredient.name !== editIngredientName) {
         await supabase
@@ -184,19 +202,13 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
             shop_url: editIngredientShopUrl || null
           })
           .eq('id', originalIngredient.ingredient_id);
-        triggerIngredientSync(); // 동기화 트리거
+        triggerIngredientSync();
       }
-
-      // 로컬 상태 업데이트
       setIngredients(prev => prev.map((ing, i) =>
         i === idx ? updatedIngredient : ing
       ));
-      
       setEditingIngredientIdx(null);
-      setEditIngredientName('');
-      setEditIngredientAmount('');
-      setEditIngredientUnit('');
-      setEditIngredientShopUrl('');
+      setEditIngredientName(''); setEditIngredientAmount(''); setEditIngredientUnit(''); setEditIngredientShopUrl(''); setEditIngredientId('');
     } catch (error) {
       console.error('재료 수정 중 오류:', error);
       alert('재료 수정 중 오류가 발생했습니다. 다시 시도해주세요.');
@@ -235,7 +247,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
     setSteps(prev => prev.map((step, i) => i === idx ? { ...step, description: value } : step));
   };
 
-  // 폼 제출 (Supabase 연동)
+  // 폼 제출 (DB 저장은 상위에서만)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) { alert('레시피 제목을 입력해주세요.'); return; }
@@ -248,7 +260,8 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
         id: initialRecipe.id,
         title: title.trim(),
         description: description.trim(),
-        ingredients,
+        // ingredient_id를 무조건 문자열로 변환
+        ingredients: ingredients.map(ing => ({ ...ing, ingredient_id: String(ing.ingredient_id) })),
         steps: steps.map(s => ({ description: s.description, isImportant: s.isImportant })),
         videourl: videourl.trim() || undefined,
         channel: channel.trim() || undefined,
@@ -262,65 +275,33 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
     }
 
     // 2. 추가(INSERT) 모드: id가 없을 때만 insert 실행
-    try {
-      // DB 컬럼명과 타입에 맞게 변환
-      const supabaseRecipe = {
-        title: title.trim(),
-        description: description.trim(),
-        ingredients: ingredients.map(ing => ({
-          name: ing.name,
-          amount: ing.amount,
-          unit: ing.unit,
-          shop_url: ing.shop_url || "",
-          ingredient_id: ing.ingredient_id || ""
-        })),
-        steps: steps.map(step => ({
-          description: step.description,
-          isImportant: step.isImportant ?? false
-        })),
-        videourl: videourl.trim() || null,
-        createdat: initialRecipe?.createdat || new Date().toISOString(),
-        isfavorite: "false"
-      };
-
-      const { data: savedRecipe, error } = await supabase
-        .from('recipes')
-        .insert(supabaseRecipe)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('레시피 저장 실패:', error);
-        alert('레시피 저장에 실패했습니다. 다시 시도해주세요.');
-        return;
-      }
-
-      const recipe: Recipe = {
-        id: savedRecipe.id || generateId(),
-        title: title.trim(),
-        description: description.trim(),
-        ingredients,
-        steps: steps.map(s => ({ description: s.description, isImportant: s.isImportant })),
-        videourl: videourl.trim() || undefined,
-        channel: channel.trim() || undefined,
-        tags: initialRecipe?.tags || [],
-        isVegetarian: initialRecipe?.isVegetarian || false,
-        createdat: initialRecipe?.createdat || new Date(),
-        isfavorite: initialRecipe?.isfavorite || false
-      };
-      onSave(recipe);
-    } catch (error) {
-      console.error('레시피 저장 중 오류:', error);
-      alert('레시피 저장 중 오류가 발생했습니다.');
-    }
+    // DB 저장은 상위에서만 하므로 여기서는 onSave만 호출
+    const recipe: Recipe = {
+      id: '',
+      title: title.trim(),
+      description: description.trim(),
+      ingredients,
+      steps: steps.map(s => ({ description: s.description, isImportant: s.isImportant })),
+      videourl: videourl.trim() || undefined,
+      channel: channel.trim() || undefined,
+      tags: initialRecipe?.tags || [],
+      isVegetarian: initialRecipe?.isVegetarian || false,
+      createdat: new Date(),
+      isfavorite: false
+    };
+    onSave(recipe);
   };
 
-  // 자동완성 상태
+  // 자동완성 상태 (추가 입력용)
   const [ingredientSuggestions, setIngredientSuggestions] = useState<{ name: string; unit: string; shop_url?: string }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const autocompleteRef = useRef<HTMLDivElement>(null);
+  // 자동완성 상태 (수정 입력용)
+  const [editIngredientSuggestions, setEditIngredientSuggestions] = useState<{ name: string; unit: string; shop_url?: string }[]>([]);
+  const [showEditSuggestions, setShowEditSuggestions] = useState(false);
+  const editAutocompleteRef = useRef<HTMLDivElement>(null);
 
-  // 재료명 입력 시 자동완성 검색
+  // 재료명 입력 시 자동완성 검색 (추가 입력용)
   useEffect(() => {
     if (!ingredientName.trim()) {
       setIngredientSuggestions([]);
@@ -328,10 +309,10 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
     }
     let active = true;
     (async () => {
-      if (!ingredientName.trim()) return; // name 유효성 체크
+      if (!ingredientName.trim()) return;
       const { data, error } = await supabase
         .from('ingredients_master')
-        .select('name, unit, shop_url')
+        .select('id, name, unit, shop_url')
         .ilike('name', `%${ingredientName.trim()}%`)
         .limit(7);
       if (active) {
@@ -342,21 +323,64 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
     })();
     return () => { active = false; };
   }, [ingredientName]);
-
-  // 자동완성 외부 클릭 시 닫기
+  // 재료명 입력 시 자동완성 검색 (수정 입력용)
+  useEffect(() => {
+    if (!editIngredientName.trim() || editingIngredientIdx === null) {
+      setEditIngredientSuggestions([]);
+      return;
+    }
+    let active = true;
+    (async () => {
+      if (!editIngredientName.trim()) return;
+      const { data, error } = await supabase
+        .from('ingredients_master')
+        .select('name, unit, shop_url')
+        .ilike('name', `%${editIngredientName.trim()}%`)
+        .limit(7);
+      if (active) {
+        setEditIngredientSuggestions(
+          data?.filter((row: { name: string }) => row.name !== editIngredientName.trim()) || []
+        );
+      }
+    })();
+    return () => { active = false; };
+  }, [editIngredientName, editingIngredientIdx]);
+  // 자동완성 외부 클릭 시 닫기 (수정 입력용)
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (autocompleteRef.current && !autocompleteRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
+      if (editAutocompleteRef.current && !editAutocompleteRef.current.contains(e.target as Node)) {
+        setShowEditSuggestions(false);
       }
     }
-    if (showSuggestions) {
+    if (showEditSuggestions) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showSuggestions]);
+  }, [showEditSuggestions]);
+
+  // 자동완성 후보 클릭 시 id까지 세팅 (추가 입력용)
+  const handleSuggestionClick = (item: any) => {
+    setIngredientName(item.name);
+    setIngredientUnit(item.unit || '');
+    setIngredientShopUrl(item.shop_url || '');
+    setIngredientId(item.id || '');
+  };
+  // ingredientId 상태 추가
+  const [ingredientId, setIngredientId] = useState('');
+  // 입력값이 바뀌면 id 초기화
+  useEffect(() => { setIngredientId(''); }, [ingredientName]);
+
+  // 수정 입력용 자동완성도 동일하게 적용
+  const [editIngredientId, setEditIngredientId] = useState('');
+  const handleEditSuggestionClick = (item: any) => {
+    setEditIngredientName(item.name);
+    setEditIngredientUnit(item.unit || '');
+    setEditIngredientShopUrl(item.shop_url || '');
+    setEditIngredientId(item.id || '');
+  };
+  useEffect(() => { setEditIngredientId(''); }, [editIngredientName]);
 
   // 조리 단계 중요 여부 변경 핸들러
   const handleStepImportantChange = (idx: number, checked: boolean) => {
@@ -364,204 +388,255 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
   };
 
   return (
-    <div className="w-full max-w-md mx-auto px-2 sm:px-4 overflow-x-hidden bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl p-4 sm:p-6 animate-slideIn">
-      <div className="flex items-center justify-between mb-4 sm:mb-6">
-        <h2 className="text-lg sm:text-xl font-bold text-white">{initialRecipe?.id ? '레시피 수정' : '레시피 추가'}</h2>
-        <button
-          onClick={onCancel}
-          className="p-2 text-gray-400 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-        >
-          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+    <div className="w-full max-w-md mx-auto px-3 sm:px-6 my-6">
+      <div className="bg-[#181818] rounded-2xl shadow-lg p-3 sm:p-6 flex flex-col gap-4 sm:gap-6">
+        <h2 className="text-xl sm:text-2xl font-bold text-white mb-2 sm:mb-4">레시피 추가</h2>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:gap-6">
+          {/* 각 입력 필드/섹션에 mb-2, gap-2 등 추가 */}
+          {/* 기본 정보 */}
+          <div className="space-y-2 sm:space-y-4">
+            <div>
+              <label className="block text-white font-medium mb-2">레시피 제목 *</label>
+              <input
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="예: 김치찌개"
+                className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-4 py-3 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 min-h-[44px] text-base sm:text-lg"
+                required
+              />
+            </div>
+            {/* 채널명 입력란 완전 삭제 */}
+            <div>
+              <label className="block text-white font-medium mb-2">유튜브 링크</label>
+              <input
+                type="text"
+                value={videourl}
+                onChange={e => setVideourl(e.target.value)}
+                placeholder="https://youtube.com/..."
+                className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-4 py-3 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 min-h-[44px] text-base sm:text-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-white font-medium mb-2">설명</label>
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="레시피에 대한 간단한 설명을 입력하세요"
+                rows={3}
+                className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-4 py-3 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 resize-none min-h-[80px] text-base sm:text-lg"
+              />
+            </div>
+          </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
-        {/* 기본 정보 */}
-        <div className="space-y-3 sm:space-y-4">
+          {/* 재료 입력 */}
           <div>
-            <label className="block text-white font-medium mb-2">레시피 제목 *</label>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="예: 김치찌개"
-              className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-4 py-3 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 min-h-[48px]"
-              required
-            />
-          </div>
-          {/* 채널명 입력란 완전 삭제 */}
-          <div>
-            <label className="block text-white font-medium mb-2">유튜브 링크</label>
-            <input
-              type="text"
-              value={videourl}
-              onChange={e => setVideourl(e.target.value)}
-              placeholder="https://youtube.com/..."
-              className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-4 py-3 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 min-h-[44px]"
-            />
-          </div>
-          <div>
-            <label className="block text-white font-medium mb-2">설명</label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="레시피에 대한 간단한 설명을 입력하세요"
-              rows={3}
-              className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-4 py-3 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 resize-none min-h-[80px]"
-            />
-          </div>
-        </div>
-
-        {/* 재료 입력 */}
-        <div>
-          <label className="block text-white font-medium mb-3">재료 *</label>
-          <div className="space-y-3">
-            {ingredients.map((ingredient, index) => (
-              <div key={index} className="flex items-center justify-between p-2 bg-[#232323] rounded-xl mb-1">
-                {editingIngredientIdx === index ? (
-                  <>
-                    <input
-                      type="text"
-                      value={editIngredientName}
-                      onChange={e => setEditIngredientName(e.target.value)}
-                      placeholder="재료명"
-                      className="bg-[#232323] border border-[#444] text-white rounded-xl px-2 py-1 text-sm w-1/4"
-                    />
-                    <input
-                      type="text"
-                      value={editIngredientAmount}
-                      onChange={e => setEditIngredientAmount(e.target.value)}
-                      placeholder="수량"
-                      className="bg-[#232323] border border-[#444] text-white rounded-xl px-2 py-1 text-sm w-1/4"
-                    />
-                    <input
-                      type="text"
-                      value={editIngredientUnit}
-                      onChange={e => setEditIngredientUnit(e.target.value)}
-                      placeholder="단위"
-                      className="bg-[#232323] border border-[#444] text-white rounded-xl px-2 py-1 text-sm w-1/4"
-                    />
-                    <input
-                      type="text"
-                      value={editIngredientShopUrl}
-                      onChange={e => setEditIngredientShopUrl(e.target.value)}
-                      placeholder="구매링크"
-                      className="bg-[#232323] border border-[#444] text-white rounded-xl px-2 py-1 text-sm w-1/4"
-                    />
-                    <button type="button" onClick={() => handleSaveEditIngredient(index)} className="ml-2 px-2 py-1 bg-orange-500 text-white rounded-lg text-xs">저장</button>
-                    <button type="button" onClick={handleCancelEditIngredient} className="ml-1 px-2 py-1 bg-gray-500 text-white rounded-lg text-xs">취소</button>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-white font-medium">{ingredient.name}</div>
-                      <div className="text-gray-400 text-sm">{ingredient.amount} {ingredient.unit}</div>
-                      {/* 구매링크 있음 표시 */}
-                      {ingredient.shop_url && (
-                        <span className="inline-block mt-1 px-2 py-0.5 bg-orange-500 text-white text-xs rounded-full">구매링크 있음</span>
-                      )}
-                    </div>
-                    <button type="button" onClick={() => handleEditIngredient(index)} className="p-2 text-gray-400 hover:text-orange-400 transition-colors min-h-[44px] min-w-[44px]">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 11l6.293-6.293a1 1 0 011.414 0l2.586 2.586a1 1 0 010 1.414L11 15H9v-2z" /></svg>
-                    </button>
-                    <button type="button" onClick={() => handleRemoveIngredient(index)} className="p-2 text-gray-400 hover:text-red-400 transition-colors min-h-[44px] min-w-[44px]">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                  </>
-                )}
-              </div>
-            ))}
-            <div className="grid grid-cols-2 gap-2 relative">
-              <div className="relative" ref={autocompleteRef}>
-                <input
-                  type="text"
-                  value={ingredientName}
-                  onChange={e => {
-                    setIngredientName(e.target.value);
-                    setShowSuggestions(true);
-                  }}
-                  placeholder="재료명"
-                  className="bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 text-sm"
-                  autoComplete="off"
-                  onFocus={() => setShowSuggestions(true)}
-                />
-                {/* 자동완성 드롭다운 */}
-                {showSuggestions && ingredientSuggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 z-20 bg-[#232323] border border-[#444] rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
-                    {ingredientSuggestions.map((suggestion, idx) => (
-                      <div
-                        key={idx}
-                        className="px-4 py-2 text-sm text-white hover:bg-orange-500 hover:text-white cursor-pointer"
-                        onClick={() => {
-                          setIngredientName(suggestion.name);
-                          setIngredientUnit(suggestion.unit || '');
-                          setIngredientShopUrl(suggestion.shop_url || '');
-                          setShowSuggestions(false);
-                        }}
-                      >
-                        <span className="font-medium">{suggestion.name}</span>
-                        {suggestion.unit && (
-                          <span className="ml-2 text-gray-400 text-xs">{suggestion.unit}</span>
-                        )}
-                        {suggestion.shop_url && (
-                          <span className="ml-2 text-orange-400 text-xs underline">구매링크</span>
-                        )}
+            <label className="block text-white font-medium mb-2">재료 *</label>
+            <div className="space-y-2">
+              {/* 재료 리스트 - 한 줄 요약형, 최소 여백, 작은 아이콘 */}
+              {ingredients.map((ingredient, index) => (
+                <div
+                  key={ingredient.ingredient_id || ingredient.name || index}
+                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#232323] rounded-lg px-3 py-2 mb-1 gap-2 text-sm sm:text-base"
+                  style={{ minHeight: '40px' }}
+                >
+                  {editingIngredientIdx === index ? (
+                    // 수정 입력란 UI (세로 배치, 자동완성 포함)
+                    <div className="w-full flex flex-col gap-2">
+                      <div className="relative w-full flex flex-col sm:flex-row gap-2">
+                        <div className="relative flex-1 min-w-0">
+                          <input
+                            type="text"
+                            value={editIngredientName}
+                            onChange={e => {
+                              setEditIngredientName(e.target.value);
+                              setShowEditSuggestions(true);
+                            }}
+                            placeholder="재료명"
+                            className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
+                            autoComplete="off"
+                            onFocus={() => setShowEditSuggestions(true)}
+                          />
+                          {/* 자동완성 드롭다운 */}
+                          {showEditSuggestions && editIngredientSuggestions.length > 0 && (
+                            <div ref={editAutocompleteRef} className="absolute left-0 right-0 z-20 bg-[#232323] border border-[#444] rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
+                              {editIngredientSuggestions.map((suggestion, idx) => (
+                                <div
+                                  key={idx}
+                                  className="px-4 py-2 text-sm text-white hover:bg-orange-500 hover:text-white cursor-pointer"
+                                  onClick={() => {
+                                    setEditIngredientName(suggestion.name);
+                                    setEditIngredientUnit(suggestion.unit || '');
+                                    setEditIngredientShopUrl(suggestion.shop_url || '');
+                                    setShowEditSuggestions(false);
+                                  }}
+                                >
+                                  <span className="font-medium">{suggestion.name}</span>
+                                  {suggestion.unit && (
+                                    <span className="ml-2 text-gray-400 text-xs">{suggestion.unit}</span>
+                                  )}
+                                  {suggestion.shop_url && (
+                                    <span className="ml-2 text-orange-400 text-xs underline">구매링크</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          value={editIngredientAmount}
+                          onChange={e => setEditIngredientAmount(e.target.value)}
+                          placeholder="수량"
+                          className="w-20 bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
+                        />
+                        <input
+                          type="text"
+                          value={editIngredientUnit}
+                          onChange={e => setEditIngredientUnit(e.target.value)}
+                          placeholder="단위"
+                          className="w-24 bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
+                        />
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <input
-                type="text"
-                value={ingredientAmount}
-                onChange={e => setIngredientAmount(e.target.value)}
-                placeholder="수량"
-                className="bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 text-sm"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                value={ingredientUnit}
-                onChange={e => setIngredientUnit(e.target.value)}
-                placeholder="단위 (개, g, ml 등)"
-                className="bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 text-sm"
-              />
-              <input
-                type="text"
-                value={ingredientShopUrl}
-                onChange={e => setIngredientShopUrl(e.target.value)}
-                placeholder="구매링크 (선택)"
-                className="bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 text-sm"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={handleAddIngredient}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2 font-medium transition-colors"
-            >
-              재료 추가
-            </button>
-          </div>
-        </div>
-
-        {/* 조리 단계 입력 */}
-        <div>
-          <label className="block text-white font-medium mb-3">조리 단계 *</label>
-          <div className="space-y-3">
-            {steps.map((step, idx) => (
-              <div key={idx} className="flex items-center gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={editIngredientShopUrl}
+                        onChange={e => setEditIngredientShopUrl(e.target.value)}
+                        placeholder="구매링크"
+                        className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
+                      />
+                      <div className="flex gap-2 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEditIngredient(index)}
+                          className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-bold"
+                        >저장</button>
+                        <button
+                          type="button"
+                          onClick={handleCancelEditIngredient}
+                          className="px-3 py-1 bg-gray-500 text-white rounded-lg text-xs font-bold"
+                        >취소</button>
+                      </div>
+                    </div>
+                  ) : (
+                    // 요약형
+                    <div className="w-full flex items-center gap-2 min-w-0 flex-1">
+                      <span className="truncate font-medium text-white max-w-[90px] sm:max-w-[140px]">{ingredient.name}</span>
+                      <span className="text-gray-400 whitespace-nowrap">{ingredient.amount} {ingredient.unit}</span>
+                      {ingredient.shop_url && (
+                        <span className="ml-1 px-2 py-0.5 bg-orange-500 text-white text-xs rounded-full whitespace-nowrap">구매링크</span>
+                      )}
+                      <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
+                        <button
+                          type="button"
+                          onClick={() => handleEditIngredient(index)}
+                          className="p-1 text-gray-400 hover:text-orange-400 transition-colors"
+                          aria-label="재료 수정"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 11l6.293-6.293a1 1 0 011.414 0l2.586 2.586a1 1 0 010 1.414L11 15H9v-2z" /></svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveIngredient(index)}
+                          className="p-1 text-gray-400 hover:text-red-400 transition-colors"
+                          aria-label="재료 삭제"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {/* 재료 추가 입력란 - 한 줄 또는 2줄, gap/여백/정렬 개선, 반응형 */}
+              <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                {/* 재료명 입력란 + 자동완성 드롭다운 */}
+                <div className="relative flex-1 min-w-0">
+                  <input
+                    type="text"
+                    value={ingredientName}
+                    onChange={e => {
+                      setIngredientName(e.target.value);
+                      setShowSuggestions(true);
+                    }}
+                    placeholder="재료명"
+                    className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm min-w-0"
+                    autoComplete="off"
+                    onFocus={() => setShowSuggestions(true)}
+                  />
+                  {/* 자동완성 드롭다운 */}
+                  {showSuggestions && ingredientSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 z-20 bg-[#232323] border border-[#444] rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
+                      {ingredientSuggestions.map((suggestion, idx) => (
+                        <div
+                          key={idx}
+                          className="px-4 py-2 text-sm text-white hover:bg-orange-500 hover:text-white cursor-pointer"
+                          onClick={() => {
+                            setIngredientName(suggestion.name);
+                            setIngredientUnit(suggestion.unit || '');
+                            setIngredientShopUrl(suggestion.shop_url || '');
+                            setShowSuggestions(false);
+                          }}
+                        >
+                          <span className="font-medium">{suggestion.name}</span>
+                          {suggestion.unit && (
+                            <span className="ml-2 text-gray-400 text-xs">{suggestion.unit}</span>
+                          )}
+                          {suggestion.shop_url && (
+                            <span className="ml-2 text-orange-400 text-xs underline">구매링크</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <input
                   type="text"
-                  value={step.description}
-                  onChange={e => handleStepChange(idx, e.target.value)}
-                  placeholder={`조리 단계 ${idx + 1}`}
-                  className="flex-1 bg-[#232323] border border-[#444] text-white rounded-xl px-2 py-1 text-sm"
+                  value={ingredientAmount}
+                  onChange={e => setIngredientAmount(e.target.value)}
+                  placeholder="수량"
+                  className="w-20 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
                 />
-                {/* 중요 단계 체크박스 - 상세화면과 동일한 체크박스 스타일 */}
-                                  <button
+                <input
+                  type="text"
+                  value={ingredientUnit}
+                  onChange={e => setIngredientUnit(e.target.value)}
+                  placeholder="단위 (개, g, ml 등)"
+                  className="w-24 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
+                />
+                <input
+                  type="text"
+                  value={ingredientShopUrl}
+                  onChange={e => setIngredientShopUrl(e.target.value)}
+                  placeholder="구매링크 (선택)"
+                  className="flex-1 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm min-w-0"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleAddIngredient}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2 font-medium transition-colors mt-2"
+              >
+                재료 추가
+              </button>
+            </div>
+          </div>
+
+          {/* 조리 단계 입력 */}
+          <div>
+            <label className="block text-white font-medium mb-2">조리 단계 *</label>
+            <div className="space-y-2">
+              {steps.map((step, idx) => (
+                <div key={idx} className="flex items-center gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={step.description}
+                    onChange={e => handleStepChange(idx, e.target.value)}
+                    placeholder={`조리 단계 ${idx + 1}`}
+                    className="flex-1 bg-[#232323] border border-[#444] text-white rounded-xl px-2 py-1 text-sm"
+                  />
+                  {/* 중요 단계 체크박스 - 상세화면과 동일한 체크박스 스타일 */}
+                  <button
                     type="button"
                     onClick={() => handleStepImportantChange(idx, !step.isImportant)}
                     className={`ml-2 transition-all duration-200 ${
@@ -575,47 +650,48 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   </button>
-                <button type="button" onClick={() => handleRemoveStep(idx)} className="p-2 text-gray-400 hover:text-red-400 transition-colors min-h-[44px] min-w-[44px]">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  <button type="button" onClick={() => handleRemoveStep(idx)} className="p-2 text-gray-400 hover:text-red-400 transition-colors min-h-[44px] min-w-[44px]">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={stepDescription}
+                  onChange={e => setStepDescription(e.target.value)}
+                  placeholder="조리 단계를 입력하세요"
+                  className="flex-1 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddStep}
+                  className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl px-4 py-2 font-medium transition-colors"
+                >
+                  추가
                 </button>
               </div>
-            ))}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={stepDescription}
-                onChange={e => setStepDescription(e.target.value)}
-                placeholder="조리 단계를 입력하세요"
-                className="flex-1 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-xl px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 text-sm"
-              />
-              <button
-                type="button"
-                onClick={handleAddStep}
-                className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl px-4 py-2 font-medium transition-colors"
-              >
-                추가
-              </button>
-            </div>
+            </div> {/* ← 이 줄을 추가하여 조리 단계 입력 전체를 닫음 */}
           </div>
-        </div>
 
-        {/* 저장/취소 버튼 */}
-        <div className="flex gap-3 pt-4">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex-1 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-white rounded-xl py-3 font-medium transition-colors"
-          >
-            취소
-          </button>
-          <button
-            type="submit"
-            className="flex-1 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white rounded-xl py-3 font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
-          >
-            저장
-          </button>
-        </div>
-      </form>
+          {/* 저장/취소 버튼 */}
+          <div className="flex flex-col sm:flex-row gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="flex-1 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-white rounded-xl py-3 font-medium transition-colors"
+            >
+              취소
+            </button>
+            <button
+              type="submit"
+              className="flex-1 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white rounded-xl py-3 font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+            >
+              저장
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 } 

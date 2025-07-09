@@ -10,7 +10,7 @@ export const getYouTubeEmbedUrl = (url: string): string => {
   
   // YouTube URL 패턴들
   const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([^&\n?#]+)/,
     /youtube\.com\/watch\?.*v=([^&\n?#]+)/
   ];
   
@@ -35,7 +35,8 @@ export const isValidYouTubeUrl = (url: string): boolean => {
   const youtubePatterns = [
     /^https?:\/\/(www\.)?youtube\.com\/watch\?v=[^&\n?#]+/,
     /^https?:\/\/youtu\.be\/[^&\n?#]+/,
-    /^https?:\/\/(www\.)?youtube\.com\/embed\/[^&\n?#]+/
+    /^https?:\/\/(www\.)?youtube\.com\/embed\/[^&\n?#]+/,
+    /^https?:\/\/(www\.)?youtube\.com\/shorts\/[^&\n?#]+/
   ];
   
   return youtubePatterns.some(pattern => pattern.test(url));
@@ -52,16 +53,24 @@ export const getYouTubeVideoId = (url: string): string | null => {
     const parsed = new URL(url);
     if (parsed.hostname === 'youtu.be') {
       // https://youtu.be/WWT8PjlQZgs?si=...
-      return parsed.pathname.replace('/', '').split('?')[0];
+      // 11자리만 추출
+      return parsed.pathname.replace('/', '').slice(0, 11);
     }
     if (parsed.hostname.includes('youtube.com')) {
-      return parsed.searchParams.get('v');
+      // shorts URL 처리: youtube.com/shorts/VIDEO_ID
+      if (parsed.pathname.startsWith('/shorts/')) {
+        // 11자리만 추출 (파라미터/슬래시 등 제거)
+        return parsed.pathname.replace('/shorts/', '').split(/[/?]/)[0].slice(0, 11);
+      }
+      // 일반 watch URL 처리: youtube.com/watch?v=VIDEO_ID
+      const v = parsed.searchParams.get('v');
+      return v ? v.slice(0, 11) : null;
     }
   } catch {
-    // fallback: 정규식
-    const match = url.match(/(?:youtu\.be\/|v=)([\w-]{11})/);
+    // fallback: 정규식 (shorts 포함, 11자리만)
+    const match = url.match(/(?:youtu\.be\/|v=|shorts\/)([\w-]{11})/);
     if (match) return match[1];
-    }
+  }
   return null;
 };
 
@@ -99,18 +108,25 @@ export const normalizeYouTubeUrl = (url: string): string => {
 
 // 유튜브 videoUrl에서 썸네일 URL을 생성하는 함수
 export function getYoutubeThumbnailUrl(videoUrl: string): string {
-  // 유튜브 ID 추출 (youtu.be/..., youtube.com/watch?v=... 등 지원)
+  // 유튜브 ID 추출 (11자리만)
   let id = '';
   try {
     const url = new URL(videoUrl);
     if (url.hostname === 'youtu.be') {
-      id = url.pathname.replace('/', '');
+      id = url.pathname.replace('/', '').slice(0, 11);
     } else if (url.hostname.includes('youtube.com')) {
-      id = url.searchParams.get('v') || '';
+      // shorts URL 처리: youtube.com/shorts/VIDEO_ID
+      if (url.pathname.startsWith('/shorts/')) {
+        id = url.pathname.replace('/shorts/', '').split(/[/?]/)[0].slice(0, 11);
+      } else {
+        // 일반 watch URL 처리: youtube.com/watch?v=VIDEO_ID
+        const v = url.searchParams.get('v');
+        id = v ? v.slice(0, 11) : '';
+      }
     }
   } catch {
-    // fallback: 정규식
-    const match = videoUrl.match(/(?:youtu\.be\/|v=)([\w-]{11})/);
+    // fallback: 정규식 (shorts 포함, 11자리만)
+    const match = videoUrl.match(/(?:youtu\.be\/|v=|shorts\/)([\w-]{11})/);
     if (match) id = match[1];
   }
   if (!id) return '';
