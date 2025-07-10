@@ -282,3 +282,41 @@ export function sortIngredients(ingredients: IngredientMaster[], sortBy: 'name' 
       return sorted;
   }
 } 
+
+// 두 재료를 통합(merge)하는 함수: oldId의 모든 레시피를 newId로 교체, oldId가 더 이상 사용되지 않으면 삭제
+export async function mergeIngredients(oldId: string, newId: string): Promise<boolean> {
+  try {
+    // 1. 모든 레시피를 불러와서 oldId가 포함된 레시피만 필터링
+    const { data: allRecipes, error: recipeError } = await supabase
+      .from('recipes')
+      .select('id, ingredients');
+    if (recipeError) {
+      console.error('레시피 조회 실패:', recipeError);
+      return false;
+    }
+    const recipes = (allRecipes || []).filter(recipe =>
+      Array.isArray(recipe.ingredients) && recipe.ingredients.some((ing: any) => ing.ingredient_id === oldId)
+    );
+    for (const recipe of recipes) {
+      const updatedIngredients = (recipe.ingredients || []).map((ing: any) =>
+        ing.ingredient_id === oldId ? { ...ing, ingredient_id: newId } : ing
+      );
+      await supabase
+        .from('recipes')
+        .update({ ingredients: updatedIngredients })
+        .eq('id', recipe.id);
+    }
+    // 2. oldId가 더 이상 사용되지 않으면 ingredients_master에서 삭제
+    const stillUsed = (allRecipes || []).filter(recipe =>
+      Array.isArray(recipe.ingredients) && recipe.ingredients.some((ing: any) => ing.ingredient_id === oldId)
+    );
+    if (!stillUsed || stillUsed.length === 0) {
+      await supabase.from('ingredients_master').delete().eq('id', oldId);
+    }
+    triggerIngredientSync();
+    return true;
+  } catch (error) {
+    console.error('재료 통합(merge) 중 오류:', error);
+    return false;
+  }
+} 

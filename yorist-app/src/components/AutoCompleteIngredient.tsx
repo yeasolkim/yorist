@@ -212,13 +212,6 @@ export default function AutoCompleteIngredient({
           ) : null}
         </div>
       )}
-
-      {/* 재료 ID 표시 (디버깅용, 필요시 제거) */}
-      {value.ingredient_id && (
-        <div className="text-xs text-gray-500 mt-1">
-          ID: {value.ingredient_id}
-        </div>
-      )}
     </div>
   );
 } 

@@ -7,8 +7,9 @@ import RecipeCard from "@/components/RecipeCard";
 import YoristHeader from "@/components/YoristHeader";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Recipe } from "@/lib/types";
-import { useIngredientSync, triggerIngredientSync } from '@/lib/ingredientSync';
+import { useIngredientSync, triggerIngredientSync, findIngredientByName, mergeIngredients, updateIngredient } from '@/lib/ingredientSync';
 import Link from "next/link";
+import AutoCompleteIngredient from '@/components/AutoCompleteIngredient';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -93,17 +94,42 @@ export default function IngredientDetailPage() {
   // 저장
   const handleSaveEdit = async () => {
     if (!editName.trim()) { setEditError('재료명을 입력하세요.'); return; }
-    const { error } = await supabase
-      .from('ingredients_master')
-      .update({ name: editName.trim(), unit: editUnit.trim(), shop_url: editShopUrl.trim() || null })
-      .eq('id', ingredient.id);
-    if (error) {
-      setEditError('수정 중 오류가 발생했습니다.');
-      return;
+    try {
+      // 1. 이름이 기존 DB에 있는 재료명인지 확인
+      const existing = await findIngredientByName(editName.trim());
+      if (existing && existing.id !== ingredient.id) {
+        // 기존 재료로 통합
+        const ok = await mergeIngredients(ingredient.id, existing.id);
+        if (!ok) {
+          setEditError('재료 통합 중 오류가 발생했습니다.');
+          return;
+        }
+        // shop_url, unit 등 정보 병합(필요시)
+        await updateIngredient(existing.id, {
+          unit: editUnit.trim() || existing.unit,
+          shop_url: editShopUrl.trim() || existing.shop_url || undefined
+        });
+        setEditMode(false);
+        setEditError(null);
+        triggerIngredientSync();
+        router.replace(`/ingredient/${existing.id}`); // 새 재료 상세로 이동
+      } else {
+        // 중복이 아니면 단순 update
+        const { error } = await supabase
+          .from('ingredients_master')
+          .update({ name: editName.trim(), unit: editUnit.trim(), shop_url: editShopUrl.trim() || null })
+          .eq('id', ingredient.id);
+        if (error) {
+          setEditError('수정 중 오류가 발생했습니다.');
+          return;
+        }
+        setEditMode(false);
+        setEditError(null);
+        triggerIngredientSync();
+      }
+    } catch (e) {
+      setEditError('예상치 못한 오류가 발생했습니다.');
     }
-    setEditMode(false);
-    setEditError(null);
-    triggerIngredientSync();
   };
   // 취소
   const handleCancelEdit = () => {
@@ -179,18 +205,26 @@ export default function IngredientDetailPage() {
       </div>
       <main className="flex-1 w-full max-w-md mx-auto px-2 sm:px-4 pb-24">
         {/* 재료 정보 섹션 */}
-        <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl p-4 sm:p-6 mt-4 mb-6">
+        <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl p-4 sm:p-6 mt-4 mb-6 shadow-xl">
           <div className="flex items-center justify-between mb-2">
             {/* 재료명 + 수정 버튼 */}
             <div className="flex items-center gap-2">
               {editMode ? (
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={e => setEditName(e.target.value)}
-                  className="bg-[#232323] border border-[#333] text-white rounded-xl px-3 py-2 text-lg font-bold focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition w-40"
+                <AutoCompleteIngredient
+                  value={{
+                    ingredient_id: ingredient.id,
+                    name: editName,
+                    amount: '',
+                    unit: editUnit,
+                    shop_url: editShopUrl
+                  }}
+                  onChange={(ing) => {
+                    setEditName(ing.name);
+                    setEditUnit(ing.unit);
+                    setEditShopUrl(ing.shop_url || '');
+                  }}
                   placeholder="재료명"
-                  required
+                  className="w-full"
                 />
               ) : (
                 <h1 className="text-xl sm:text-2xl font-bold text-white">{ingredient.name}</h1>
@@ -198,78 +232,78 @@ export default function IngredientDetailPage() {
               {!editMode && (
                 <button
                   onClick={handleEdit}
-                  className="ml-1 p-2 rounded-full bg-[#232323] hover:bg-orange-500 text-gray-400 hover:text-white transition"
-                  aria-label="수정"
+                  className="ml-1 px-2 py-1 rounded-lg bg-[#232323] text-gray-400 hover:text-orange-400 hover:bg-[#333] text-xs font-bold border border-[#333] transition"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13h3l8-8a2.828 2.828 0 00-4-4l-8 8v3z" /></svg>
+                  수정
                 </button>
               )}
             </div>
+            {/* 즐겨찾기 하트 */}
             <button
               onClick={toggleFavorite}
-              className={`text-2xl ${isFavorite ? "text-orange-400" : "text-gray-400"} transition-colors`}
+              className={`ml-2 text-2xl ${isFavorite ? 'text-orange-400' : 'text-gray-400'} hover:text-orange-300 transition`}
               aria-label="즐겨찾기"
             >
-              {isFavorite ? "♥" : "♡"}
+              <svg className="w-6 h-6" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              </svg>
             </button>
           </div>
-          {/* 단위, shop_url 수정 */}
-          {editMode ? (
-            <>
-              <div className="mb-2">
-                <label className="block text-white text-sm mb-1">단위</label>
+          {/* 수정 폼 */}
+          {editMode && (
+            <form
+              onSubmit={e => { e.preventDefault(); handleSaveEdit(); }}
+              className="flex flex-col gap-3 mt-2"
+            >
+              <div className="flex flex-col gap-2">
                 <input
                   type="text"
                   value={editUnit}
                   onChange={e => setEditUnit(e.target.value)}
-                  className="bg-[#232323] border border-[#333] text-white rounded-xl px-3 py-2 w-32 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition"
-                  placeholder="예: 개, g, ml 등"
+                  className="w-full bg-[#232323] border border-[#333] text-white rounded-xl px-4 py-3 text-base focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition"
+                  placeholder="단위 (예: 개, g, ml 등)"
                 />
-              </div>
-              <div className="mb-2">
-                <label className="block text-white text-sm mb-1">쇼핑링크</label>
                 <input
                   type="text"
                   value={editShopUrl}
                   onChange={e => setEditShopUrl(e.target.value)}
-                  className="bg-[#232323] border border-[#333] text-white rounded-xl px-3 py-2 w-full focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition"
+                  className="w-full bg-[#232323] border border-[#333] text-white rounded-xl px-4 py-3 text-base focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition"
                   placeholder="구매 가능한 URL (선택)"
                 />
               </div>
-              {editError && <div className="text-red-500 text-sm font-medium mb-2">{editError}</div>}
-              <div className="flex gap-3 mt-4">
+              {editError && (
+                <div className="text-red-500 text-sm font-medium mt-1 mb-1">{editError}</div>
+              )}
+              <div className="flex gap-2 mt-2 w-full">
                 <button
-                  onClick={handleSaveEdit}
-                  className="flex-1 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white rounded-xl py-2 font-bold shadow-lg hover:shadow-xl transition-all"
+                  type="submit"
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-orange-400 to-orange-500 text-white font-bold text-base shadow-lg hover:from-orange-500 hover:to-orange-600 transition"
                 >
                   저장
                 </button>
                 <button
+                  type="button"
                   onClick={handleCancelEdit}
-                  className="flex-1 bg-[#444] hover:bg-[#666] text-white rounded-xl py-2 font-bold"
+                  className="flex-1 py-3 rounded-xl bg-[#333] text-white font-bold text-base shadow-lg hover:bg-[#444] transition"
                 >
                   취소
                 </button>
               </div>
-            </>
-          ) : (
-            <>
-              <div className="text-gray-400 text-sm mb-2">단위: {ingredient.unit}</div>
-              {/* 구매링크 UI */}
-              {ingredient.shop_url ? (
-                <div className="flex flex-col gap-2 mt-2">
-                  {/* 구매링크에 프로토콜이 없으면 https://를 자동으로 붙여줌 */}
-                  <a
-                    href={ingredient.shop_url?.startsWith('http') ? ingredient.shop_url : `https://${ingredient.shop_url}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block px-4 py-2 bg-orange-500 text-white rounded-full text-sm font-bold hover:bg-orange-600 transition text-center"
-                  >
-                    구매하러 가기
-                  </a>
-                </div>
-              ) : null}
-            </>
+            </form>
+          )}
+          {/* 구매링크 UI */}
+          {!editMode && ingredient.shop_url && (
+            <div className="flex flex-col gap-2 mt-2">
+              {/* 구매링크에 프로토콜이 없으면 https://를 자동으로 붙여줌 */}
+              <a
+                href={ingredient.shop_url?.startsWith('http') ? ingredient.shop_url : `https://${ingredient.shop_url}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block px-4 py-2 bg-orange-500 text-white rounded-full text-sm font-bold hover:bg-orange-600 transition text-center"
+              >
+                구매하러 가기
+              </a>
+            </div>
           )}
           {/* 삭제 버튼 - 카드 하단 */}
           <div className="flex justify-end mt-6">

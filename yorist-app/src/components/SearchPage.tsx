@@ -26,8 +26,7 @@ export default function SearchPage({
   const [loading, setLoading] = useState(false);
   const [ingredientResults, setIngredientResults] = useState<any[]>([]);
   const [popularIngredients, setPopularIngredients] = useState<any[]>([]);
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<'name' | 'favorite' | 'recent'>('favorite');
+  //  const [sortBy, setSortBy] = useState<'name' | 'favorite' | 'recent'>('favorite');
 
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
   const syncVersion = useRecipeSync();
@@ -79,17 +78,9 @@ export default function SearchPage({
       .limit(10)
       .then(({ data }) => {
         let results = data || [];
-        
-        // 즐겨찾기만 표시하는 경우 필터링
-        if (showFavoritesOnly) {
-          results = results.filter(item => item.is_favorite);
-        }
-        
-        // 정렬 적용
-        const sortedResults = sortIngredients(results, sortBy);
-        setIngredientResults(sortedResults);
+        setIngredientResults(results);
       });
-  }, [searchQuery, syncVersion, ingredientSyncVersion, showFavoritesOnly, sortBy]);
+  }, [searchQuery, syncVersion, ingredientSyncVersion]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -157,55 +148,6 @@ export default function SearchPage({
         </div>
       </div>
 
-      {/* 인기 재료 섹션 (검색어가 없을 때만 표시) */}
-      {!searchQuery.trim() && popularIngredients.length > 0 && (
-        <div className="mb-8">
-          <h3 className="text-white font-semibold mb-3">인기 재료</h3>
-          <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-            {popularIngredients.map(item => (
-              <div key={item.id} className="block" onClick={() => window.location.href = `/ingredient/${item.id}` } tabIndex={0} role="button">
-                <div className="bg-[#232323] rounded-xl p-3 hover:border hover:border-orange-400 transition cursor-pointer h-14 flex items-center justify-between">
-                  {/* 재료명 */}
-                  <span className="text-white font-medium text-sm truncate">{item.name}</span>
-                  <div className="flex items-center gap-1">
-                    {item.shop_url && (
-                      <a 
-                        href={item.shop_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="flex items-center justify-center text-white hover:text-orange-400 transition"
-                        aria-label="구매링크"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path d="M3 3h2l.4 2M7 13h10l4-8H5.4" strokeLinecap="round" strokeLinejoin="round"/>
-                          <circle cx="9" cy="21" r="1" />
-                          <circle cx="20" cy="21" r="1" />
-                        </svg>
-                      </a>
-                    )}
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault(); e.stopPropagation();
-                        toggleFavoriteIngredient(item); 
-                        triggerRecipeSync(); 
-                        triggerIngredientSync();
-                      }}
-                      className={`text-lg ${item.is_favorite ? 'text-orange-400' : 'text-gray-400'} hover:text-orange-300 transition`}
-                      aria-label="즐겨찾기"
-                    >
-                      <svg className="w-3 h-3" fill={item.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* 실시간 추천 키워드 */}
       {searchQuery.trim() && keywordSuggestions.length > 0 && (
         <div className="mb-8">
@@ -232,29 +174,7 @@ export default function SearchPage({
         <div className="mt-8">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-bold text-white">식재료 검색 결과</h2>
-            <div className="flex items-center gap-2">
-              {/* 즐겨찾기 필터 토글 */}
-              <button
-                onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  showFavoritesOnly 
-                    ? 'bg-orange-500 text-white' 
-                    : 'bg-[#2a2a2a] text-gray-300 hover:bg-[#3a3a3a]'
-                }`}
-              >
-                즐겨찾기만
-              </button>
-              {/* 정렬 드롭다운 */}
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'name' | 'favorite' | 'recent')}
-                className="px-2 py-1 bg-[#2a2a2a] text-white text-xs rounded-lg border border-[#3a3a3a] focus:border-orange-400 outline-none"
-              >
-                <option value="favorite">즐겨찾기순</option>
-                <option value="name">이름순</option>
-                <option value="recent">최신순</option>
-              </select>
-            </div>
+            {/* 정렬 드롭다운 제거 */}
           </div>
           <div className="grid grid-cols-2 gap-x-2 gap-y-1">
             {ingredientResults.map(item => (
