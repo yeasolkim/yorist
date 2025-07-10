@@ -281,9 +281,9 @@ export default function HomePage() {
       <YoristHeader />
       {/* FAB(플로팅 액션 버튼) - 홈 탭에서만 표시 */}
       {activeTab === 'home' && (
-        <div id="fab-menu-root">
+        <div id="fab-menu-root" className="relative max-w-md mx-auto">
           {/* FAB 메뉴 버튼들 */}
-          <div className={`fixed bottom-36 right-6 z-50 flex flex-col items-end gap-3 transition-all duration-300 ${showFabMenu ? 'pointer-events-auto' : 'pointer-events-none'}`} style={{ minWidth: 160 }}>
+          <div className={`absolute bottom-36 right-6 md:right-0 z-50 flex flex-col items-end gap-3 transition-all duration-300 ${showFabMenu ? 'pointer-events-auto' : 'pointer-events-none'}`} style={{ minWidth: 160 }}>
             {/* 레시피 추가 버튼 */}
             <button
               className={`w-40 flex items-center gap-2 px-6 py-3 rounded-xl shadow-lg font-bold text-base bg-gradient-to-r from-orange-400 to-orange-500 text-white hover:from-orange-500 hover:to-orange-600 transition-all duration-200 ${showFabMenu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
@@ -307,7 +307,7 @@ export default function HomePage() {
           </div>
           {/* + 플로팅 버튼 - 하단 네비게이션 바와 겹치지 않게 더 위로 */}
           <button
-            className="fixed bottom-20 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-xl flex items-center justify-center text-3xl font-bold hover:from-orange-500 hover:to-orange-600 transition-all duration-200 focus:outline-none"
+            className="absolute bottom-20 right-6 md:right-0 z-50 w-14 h-14 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-xl flex items-center justify-center text-3xl font-bold hover:from-orange-500 hover:to-orange-600 transition-all duration-200 focus:outline-none"
             aria-label="추가 메뉴 열기"
             onClick={() => setShowFabMenu(v => !v)}
             style={{ boxShadow: '0 4px 24px 0 rgba(0,0,0,0.18)' }}

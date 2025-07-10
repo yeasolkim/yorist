@@ -3,7 +3,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Recipe, RecipeIngredient, RecipeStep } from '@/lib/types';
 import { createClient } from '@supabase/supabase-js';
-import { triggerIngredientSync } from '@/lib/ingredientSync';
+import { 
+  triggerIngredientSync, 
+  findIngredientByName, 
+  createIngredient, 
+  updateIngredient, 
+  deleteIngredientIfUnused 
+} from '@/lib/ingredientSync';
+import AutoCompleteIngredient from './AutoCompleteIngredient';
 
 // 고유 ID 생성 함수
 const generateId = (): string => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -61,37 +68,36 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
   const handleAddIngredient = async () => {
     if (!ingredientName.trim() || !ingredientAmount.trim()) return;
     try {
-      let finalIngredientId = ingredientId;
-      // ingredientId가 없으면 name으로 DB에서 id 조회 (ilike)
-      if (!finalIngredientId) {
-        const { data: existing, error: fetchError } = await supabase
-          .from('ingredients_master')
-          .select('id')
-          .ilike('name', ingredientName.trim())
-          .single();
-        if (existing && existing.id) {
-          finalIngredientId = existing.id;
-        }
-      }
-      if (!finalIngredientId) {
-        // 새 재료 추가
-        const { data: newIngredient, error } = await supabase
-          .from('ingredients_master')
-          .insert({
-            name: ingredientName.trim(),
-            unit: ingredientUnit.trim() || '개',
-            shop_url: ingredientShopUrl.trim() || null,
-            is_favorite: 'false'
-          })
-          .select('id')
-          .single();
-        if (error) {
-          console.error('재료 추가 실패:', error);
+      // AutoCompleteIngredient에서 이미 ingredient_id가 설정되어 있거나 빈 문자열로 초기화됨
+      // 빈 문자열인 경우 새 재료로 간주하여 DB에 추가
+      let finalIngredientId = '';
+      
+      // 기존 재료가 있는지 확인
+      const existingIngredient = await findIngredientByName(ingredientName.trim());
+      
+      if (existingIngredient) {
+        finalIngredientId = existingIngredient.id;
+        // 기존 재료 정보 업데이트 (shop_url, unit 등)
+        await updateIngredient(existingIngredient.id, {
+          unit: ingredientUnit.trim() || existingIngredient.unit || '개',
+          shop_url: ingredientShopUrl.trim() || existingIngredient.shop_url || undefined
+        });
+      } else {
+        // 새 재료 생성
+        const newIngredientId = await createIngredient({
+          name: ingredientName.trim(),
+          unit: ingredientUnit.trim() || '개',
+          shop_url: ingredientShopUrl.trim() || undefined,
+          is_favorite: false
+        });
+        
+        if (!newIngredientId) {
           alert('재료 추가에 실패했습니다.');
           return;
         }
-        finalIngredientId = newIngredient.id;
+        finalIngredientId = newIngredientId;
       }
+      
       const newIngredient: RecipeIngredient = {
         ingredient_id: String(finalIngredientId),
         name: ingredientName.trim(),
@@ -100,8 +106,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
         shop_url: ingredientShopUrl.trim() || undefined
       };
       setIngredients(prev => [...prev, newIngredient]);
-      setIngredientName(''); setIngredientAmount(''); setIngredientUnit(''); setIngredientShopUrl(''); setIngredientId('');
-      triggerIngredientSync();
+      setIngredientName(''); setIngredientAmount(''); setIngredientUnit(''); setIngredientShopUrl('');
     } catch (error) {
       console.error('재료 추가 중 오류:', error);
       alert('재료 추가 중 오류가 발생했습니다.');
@@ -113,26 +118,13 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
     try {
       const ingredientToRemove = ingredients[index];
       
-      // ingredients_master에서 해당 재료가 다른 레시피에서 사용되지 않는지 확인
-      if (ingredientToRemove.ingredient_id) {
-        const { data: otherRecipes } = await supabase
-          .from('recipes')
-          .select('ingredients')
-          .neq('id', initialRecipe?.id || '')
-          .contains('ingredients', [{ ingredient_id: ingredientToRemove.ingredient_id }]);
-        
-        // 다른 레시피에서 사용되지 않는 경우에만 ingredients_master에서 삭제
-        if (!otherRecipes || otherRecipes.length === 0) {
-          await supabase
-            .from('ingredients_master')
-            .delete()
-            .eq('id', ingredientToRemove.ingredient_id);
-          triggerIngredientSync(); // 동기화 트리거
-        }
-      }
-      
       // 로컬 상태에서 재료 제거
       setIngredients(prev => prev.filter((_, i) => i !== index));
+      
+      // ingredients_master에서 해당 재료가 다른 레시피에서 사용되지 않는 경우에만 삭제
+      if (ingredientToRemove.ingredient_id) {
+        await deleteIngredientIfUnused(ingredientToRemove.ingredient_id);
+      }
     } catch (error) {
       console.error('재료 삭제 중 오류:', error);
       alert('재료 삭제 중 오류가 발생했습니다. 다시 시도해주세요.');
@@ -189,26 +181,23 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
         name: editIngredientName,
         amount: editIngredientAmount,
         unit: editIngredientUnit,
-        shop_url: editIngredientShopUrl,
-        ingredient_id: editIngredientId || originalIngredient.ingredient_id
+        shop_url: editIngredientShopUrl
       };
-      // ingredients_master 테이블 업데이트 (재료명이 변경된 경우)
-      if (originalIngredient.ingredient_id && originalIngredient.name !== editIngredientName) {
-        await supabase
-          .from('ingredients_master')
-          .update({
-            name: editIngredientName,
-            unit: editIngredientUnit,
-            shop_url: editIngredientShopUrl || null
-          })
-          .eq('id', originalIngredient.ingredient_id);
-        triggerIngredientSync();
+      
+      // ingredients_master 테이블 업데이트
+      if (originalIngredient.ingredient_id) {
+        await updateIngredient(originalIngredient.ingredient_id, {
+          name: editIngredientName,
+          unit: editIngredientUnit,
+          shop_url: editIngredientShopUrl || undefined
+        });
       }
+      
       setIngredients(prev => prev.map((ing, i) =>
         i === idx ? updatedIngredient : ing
       ));
       setEditingIngredientIdx(null);
-      setEditIngredientName(''); setEditIngredientAmount(''); setEditIngredientUnit(''); setEditIngredientShopUrl(''); setEditIngredientId('');
+      setEditIngredientName(''); setEditIngredientAmount(''); setEditIngredientUnit(''); setEditIngredientShopUrl('');
     } catch (error) {
       console.error('재료 수정 중 오류:', error);
       alert('재료 수정 중 오류가 발생했습니다. 다시 시도해주세요.');
@@ -292,95 +281,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
     onSave(recipe);
   };
 
-  // 자동완성 상태 (추가 입력용)
-  const [ingredientSuggestions, setIngredientSuggestions] = useState<{ name: string; unit: string; shop_url?: string }[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const autocompleteRef = useRef<HTMLDivElement>(null);
-  // 자동완성 상태 (수정 입력용)
-  const [editIngredientSuggestions, setEditIngredientSuggestions] = useState<{ name: string; unit: string; shop_url?: string }[]>([]);
-  const [showEditSuggestions, setShowEditSuggestions] = useState(false);
-  const editAutocompleteRef = useRef<HTMLDivElement>(null);
 
-  // 재료명 입력 시 자동완성 검색 (추가 입력용)
-  useEffect(() => {
-    if (!ingredientName.trim()) {
-      setIngredientSuggestions([]);
-      return;
-    }
-    let active = true;
-    (async () => {
-      if (!ingredientName.trim()) return;
-      const { data, error } = await supabase
-        .from('ingredients_master')
-        .select('id, name, unit, shop_url')
-        .ilike('name', `%${ingredientName.trim()}%`)
-        .limit(7);
-      if (active) {
-        setIngredientSuggestions(
-          data?.filter((row: { name: string }) => row.name !== ingredientName.trim()) || []
-        );
-      }
-    })();
-    return () => { active = false; };
-  }, [ingredientName]);
-  // 재료명 입력 시 자동완성 검색 (수정 입력용)
-  useEffect(() => {
-    if (!editIngredientName.trim() || editingIngredientIdx === null) {
-      setEditIngredientSuggestions([]);
-      return;
-    }
-    let active = true;
-    (async () => {
-      if (!editIngredientName.trim()) return;
-      const { data, error } = await supabase
-        .from('ingredients_master')
-        .select('name, unit, shop_url')
-        .ilike('name', `%${editIngredientName.trim()}%`)
-        .limit(7);
-      if (active) {
-        setEditIngredientSuggestions(
-          data?.filter((row: { name: string }) => row.name !== editIngredientName.trim()) || []
-        );
-      }
-    })();
-    return () => { active = false; };
-  }, [editIngredientName, editingIngredientIdx]);
-  // 자동완성 외부 클릭 시 닫기 (수정 입력용)
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (editAutocompleteRef.current && !editAutocompleteRef.current.contains(e.target as Node)) {
-        setShowEditSuggestions(false);
-      }
-    }
-    if (showEditSuggestions) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showEditSuggestions]);
-
-  // 자동완성 후보 클릭 시 id까지 세팅 (추가 입력용)
-  const handleSuggestionClick = (item: any) => {
-    setIngredientName(item.name);
-    setIngredientUnit(item.unit || '');
-    setIngredientShopUrl(item.shop_url || '');
-    setIngredientId(item.id || '');
-  };
-  // ingredientId 상태 추가
-  const [ingredientId, setIngredientId] = useState('');
-  // 입력값이 바뀌면 id 초기화
-  useEffect(() => { setIngredientId(''); }, [ingredientName]);
-
-  // 수정 입력용 자동완성도 동일하게 적용
-  const [editIngredientId, setEditIngredientId] = useState('');
-  const handleEditSuggestionClick = (item: any) => {
-    setEditIngredientName(item.name);
-    setEditIngredientUnit(item.unit || '');
-    setEditIngredientShopUrl(item.shop_url || '');
-    setEditIngredientId(item.id || '');
-  };
-  useEffect(() => { setEditIngredientId(''); }, [editIngredientName]);
 
   // 조리 단계 중요 여부 변경 핸들러
   const handleStepImportantChange = (idx: number, checked: boolean) => {
@@ -441,48 +342,29 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
                   style={{ minHeight: '40px' }}
                 >
                   {editingIngredientIdx === index ? (
-                    // 수정 입력란 UI (세로 배치, 자동완성 포함)
+                    // 수정 입력란 UI (자동완성 컴포넌트 사용)
                     <div className="w-full flex flex-col gap-2">
-                      <div className="relative w-full flex flex-col sm:flex-row gap-2">
-                        <div className="relative flex-1 min-w-0">
-                          <input
-                            type="text"
-                            value={editIngredientName}
-                            onChange={e => {
-                              setEditIngredientName(e.target.value);
-                              setShowEditSuggestions(true);
-                            }}
-                            placeholder="재료명"
-                            className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
-                            autoComplete="off"
-                            onFocus={() => setShowEditSuggestions(true)}
-                          />
-                          {/* 자동완성 드롭다운 */}
-                          {showEditSuggestions && editIngredientSuggestions.length > 0 && (
-                            <div ref={editAutocompleteRef} className="absolute left-0 right-0 z-20 bg-[#232323] border border-[#444] rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
-                              {editIngredientSuggestions.map((suggestion, idx) => (
-                                <div
-                                  key={idx}
-                                  className="px-4 py-2 text-sm text-white hover:bg-orange-500 hover:text-white cursor-pointer"
-                                  onClick={() => {
-                                    setEditIngredientName(suggestion.name);
-                                    setEditIngredientUnit(suggestion.unit || '');
-                                    setEditIngredientShopUrl(suggestion.shop_url || '');
-                                    setShowEditSuggestions(false);
-                                  }}
-                                >
-                                  <span className="font-medium">{suggestion.name}</span>
-                                  {suggestion.unit && (
-                                    <span className="ml-2 text-gray-400 text-xs">{suggestion.unit}</span>
-                                  )}
-                                  {suggestion.shop_url && (
-                                    <span className="ml-2 text-orange-400 text-xs underline">구매링크</span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                      {/* 자동완성 재료명 입력 */}
+                      <AutoCompleteIngredient
+                        value={{
+                          ingredient_id: ingredient.ingredient_id || '',
+                          name: editIngredientName,
+                          amount: editIngredientAmount,
+                          unit: editIngredientUnit,
+                          shop_url: editIngredientShopUrl
+                        }}
+                        onChange={(ingredient) => {
+                          setEditIngredientName(ingredient.name);
+                          setEditIngredientAmount(ingredient.amount);
+                          setEditIngredientUnit(ingredient.unit);
+                          setEditIngredientShopUrl(ingredient.shop_url || '');
+                        }}
+                        placeholder="재료명을 입력하세요"
+                        className="w-full"
+                      />
+                      
+                      {/* 수량 및 단위 입력 */}
+                      <div className="flex gap-2">
                         <input
                           type="text"
                           value={editIngredientAmount}
@@ -497,14 +379,14 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
                           placeholder="단위"
                           className="w-24 bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
                         />
+                        <input
+                          type="text"
+                          value={editIngredientShopUrl}
+                          onChange={e => setEditIngredientShopUrl(e.target.value)}
+                          placeholder="구매링크"
+                          className="flex-1 bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
+                        />
                       </div>
-                      <input
-                        type="text"
-                        value={editIngredientShopUrl}
-                        onChange={e => setEditIngredientShopUrl(e.target.value)}
-                        placeholder="구매링크"
-                        className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
-                      />
                       <div className="flex gap-2 mt-1">
                         <button
                           type="button"
@@ -548,69 +430,51 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
                   )}
                 </div>
               ))}
-              {/* 재료 추가 입력란 - 한 줄 또는 2줄, gap/여백/정렬 개선, 반응형 */}
-              <div className="flex flex-col sm:flex-row gap-2 mt-2">
-                {/* 재료명 입력란 + 자동완성 드롭다운 */}
-                <div className="relative flex-1 min-w-0">
+              {/* 재료 추가 입력란 - 자동완성 컴포넌트 사용 */}
+              <div className="space-y-3 mt-2">
+                {/* 자동완성 재료명 입력 */}
+                <AutoCompleteIngredient
+                  value={{
+                    ingredient_id: '',
+                    name: ingredientName,
+                    amount: ingredientAmount,
+                    unit: ingredientUnit,
+                    shop_url: ingredientShopUrl
+                  }}
+                  onChange={(ingredient) => {
+                    setIngredientName(ingredient.name);
+                    setIngredientAmount(ingredient.amount);
+                    setIngredientUnit(ingredient.unit);
+                    setIngredientShopUrl(ingredient.shop_url || '');
+                  }}
+                  placeholder="재료명을 입력하세요"
+                  className="w-full"
+                />
+                
+                {/* 수량 및 단위 입력 */}
+                <div className="flex gap-2">
                   <input
                     type="text"
-                    value={ingredientName}
-                    onChange={e => {
-                      setIngredientName(e.target.value);
-                      setShowSuggestions(true);
-                    }}
-                    placeholder="재료명"
-                    className="w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm min-w-0"
-                    autoComplete="off"
-                    onFocus={() => setShowSuggestions(true)}
+                    value={ingredientAmount}
+                    onChange={e => setIngredientAmount(e.target.value)}
+                    placeholder="수량"
+                    className="w-20 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
                   />
-                  {/* 자동완성 드롭다운 */}
-                  {showSuggestions && ingredientSuggestions.length > 0 && (
-                    <div className="absolute left-0 right-0 z-20 bg-[#232323] border border-[#444] rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
-                      {ingredientSuggestions.map((suggestion, idx) => (
-                        <div
-                          key={idx}
-                          className="px-4 py-2 text-sm text-white hover:bg-orange-500 hover:text-white cursor-pointer"
-                          onClick={() => {
-                            setIngredientName(suggestion.name);
-                            setIngredientUnit(suggestion.unit || '');
-                            setIngredientShopUrl(suggestion.shop_url || '');
-                            setShowSuggestions(false);
-                          }}
-                        >
-                          <span className="font-medium">{suggestion.name}</span>
-                          {suggestion.unit && (
-                            <span className="ml-2 text-gray-400 text-xs">{suggestion.unit}</span>
-                          )}
-                          {suggestion.shop_url && (
-                            <span className="ml-2 text-orange-400 text-xs underline">구매링크</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <input
+                    type="text"
+                    value={ingredientUnit}
+                    onChange={e => setIngredientUnit(e.target.value)}
+                    placeholder="단위 (개, g, ml 등)"
+                    className="w-24 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={ingredientShopUrl}
+                    onChange={e => setIngredientShopUrl(e.target.value)}
+                    placeholder="구매링크 (선택)"
+                    className="flex-1 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm min-w-0"
+                  />
                 </div>
-                <input
-                  type="text"
-                  value={ingredientAmount}
-                  onChange={e => setIngredientAmount(e.target.value)}
-                  placeholder="수량"
-                  className="w-20 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
-                />
-                <input
-                  type="text"
-                  value={ingredientUnit}
-                  onChange={e => setIngredientUnit(e.target.value)}
-                  placeholder="단위 (개, g, ml 등)"
-                  className="w-24 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
-                />
-                <input
-                  type="text"
-                  value={ingredientShopUrl}
-                  onChange={e => setIngredientShopUrl(e.target.value)}
-                  placeholder="구매링크 (선택)"
-                  className="flex-1 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm min-w-0"
-                />
               </div>
               <button
                 type="button"
