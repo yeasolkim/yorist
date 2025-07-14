@@ -282,41 +282,15 @@ export default function HomePage() {
       {/* FAB(플로팅 액션 버튼) - 홈 탭에서만 표시 */}
       {activeTab === 'home' && (
         <>
-          {/* FAB 메뉴 버튼들과 플러스 버튼을 flex-col-reverse로 묶어서, 플러스 버튼이 아래에 오고 추가 버튼들이 위로 쌓이도록 함 */}
+          {/* FAB 메뉴 버튼들 - pointer-events를 조건부로 적용 */}
           <div
-            className={`fixed z-50 flex flex-col-reverse items-end transition-all duration-300 ${showFabMenu ? 'pointer-events-auto' : 'pointer-events-none'}`}
+            className={`fixed z-50 flex flex-col items-end transition-all duration-300 ${showFabMenu ? 'pointer-events-auto' : 'pointer-events-none'}`}
             style={{
               right: 24,
-              bottom: 96,
+              bottom: 160,
               minWidth: 160,
             }}
           >
-            {/* 플러스(+) 버튼 - 항상 아래에 고정, 위와 충분한 간격 */}
-            <button
-              className="w-14 h-14 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-xl flex items-center justify-center text-3xl font-bold hover:from-orange-500 hover:to-orange-600 transition-all duration-200 focus:outline-none"
-              style={{
-                right: 0,
-                boxShadow: '0 4px 24px 0 rgba(0,0,0,0.18)',
-                marginTop: '20px',
-              }}
-              aria-label="추가 메뉴 열기"
-              onClick={() => setShowFabMenu(v => !v)}
-            >
-              <span className="flex items-center justify-center w-full h-full">
-                <svg
-                  className={`w-7 h-7 transition-transform duration-200 ${showFabMenu ? 'rotate-45' : ''}`}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={3}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </span>
-            </button>
             {/* 레시피 추가 버튼 - 플러스 버튼 위에 충분한 간격 */}
             <button
               className={`w-40 flex items-center gap-2 px-6 py-3 rounded-xl shadow-lg font-bold text-base bg-gradient-to-r from-orange-400 to-orange-500 text-white hover:from-orange-500 hover:to-orange-600 transition-all duration-200 ${showFabMenu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
@@ -338,8 +312,39 @@ export default function HomePage() {
               재료 추가
             </button>
           </div>
-          {/* 레시피 추가 버튼 */}
-          {/* 재료 추가 버튼 */}
+          
+          {/* 플러스(+) 버튼 - 항상 클릭 가능하도록 별도 컨테이너로 분리 */}
+          <div
+            className="fixed z-50"
+            style={{
+              right: 24,
+              bottom: 96,
+            }}
+          >
+            <button
+              className="w-14 h-14 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-xl flex items-center justify-center text-3xl font-bold hover:from-orange-500 hover:to-orange-600 transition-all duration-200 focus:outline-none"
+              style={{
+                boxShadow: '0 4px 24px 0 rgba(0,0,0,0.18)',
+              }}
+              aria-label="추가 메뉴 열기"
+              onClick={() => setShowFabMenu(v => !v)}
+            >
+              <span className="flex items-center justify-center w-full h-full">
+                <svg
+                  className={`w-7 h-7 transition-transform duration-200 ${showFabMenu ? 'rotate-45' : ''}`}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </span>
+            </button>
+          </div>
         </>
       )}
       {/* 재료 추가 폼 모달 */}
