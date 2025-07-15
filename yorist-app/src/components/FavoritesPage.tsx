@@ -77,7 +77,7 @@ export default function FavoritesPage({
   }
 
   return (
-    <div className="min-h-screen bg-black px-4 pt-6 pb-24 max-w-md mx-auto">
+    <div className="px-4 pt-6"> {/* 중복된 스타일 제거 */}
       {/* 헤더 */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white mb-2">즐겨찾기</h1>

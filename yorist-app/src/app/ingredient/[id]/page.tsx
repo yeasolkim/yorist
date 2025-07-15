@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import RecipeCard from "@/components/RecipeCard";
@@ -33,43 +33,146 @@ export default function IngredientDetailPage() {
   const [editError, setEditError] = useState<string | null>(null);
   // 삭제 로딩 상태
   const [deleting, setDeleting] = useState(false);
+  // 즐겨찾기 토글 중 상태 (깜빡임 방지용)
+  const [isFavoriteToggling, setIsFavoriteToggling] = useState(false);
 
-  // 재료 정보 조회
-  useEffect(() => {
+  // 재료 정보를 최신으로 fetch하는 함수
+  const fetchLatestIngredient = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    supabase
-      .from("ingredients_master")
-      .select("id, name, unit, shop_url, is_favorite")
-      .eq("id", id)
-      .single()
-      .then(({ data }) => {
-        setIngredient(data);
-        setIsFavorite(data?.is_favorite ?? false);
-      });
-  }, [id, ingredientSyncVersion]);
+    try {
+      const { data, error } = await supabase
+        .from("ingredients_master")
+        .select("id, name, unit, shop_url, is_favorite")
+        .eq("id", id)
+        .single();
+      
+      if (error) {
+        console.error('재료 정보 fetch 실패:', error);
+        setIngredient(null);
+        setRecipes([]);
+        return;
+      }
+      
+      setIngredient(data);
+      setIsFavorite(data?.is_favorite ?? false);
+      
+      // 해당 재료를 사용하는 레시피 목록도 함께 업데이트
+      await fetchRelatedRecipes();
+    } catch (error) {
+      console.error('재료 정보 fetch 중 오류:', error);
+      setIngredient(null);
+      setRecipes([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
-  // 해당 재료를 사용하는 레시피 목록 조회
+  // 해당 재료를 사용하는 레시피 목록 조회 함수
+  const fetchRelatedRecipes = useCallback(async () => {
+    if (!id) return;
+    try {
+      const { data, error } = await supabase
+        .rpc('recipes_with_ingredient', { ingredient_id: id });
+      
+      if (error) {
+        console.error('관련 레시피 조회 실패:', error);
+        setRecipes([]);
+        return;
+      }
+      
+      setRecipes(data || []);
+    } catch (error) {
+      console.error('관련 레시피 조회 중 오류:', error);
+      setRecipes([]);
+    }
+  }, [id, supabase]);
+
+  // 초기 데이터 로드
+  useEffect(() => {
+    fetchLatestIngredient();
+  }, [fetchLatestIngredient]);
+
+  // Supabase 실시간 구독 설정
   useEffect(() => {
     if (!id) return;
-    supabase
-      .rpc('recipes_with_ingredient', { ingredient_id: id })
-      .then(({ data }) => {
-        setRecipes(data || []);
-        setLoading(false);
-      });
-  }, [id, ingredientSyncVersion]);
+
+    // 재료 마스터 테이블 변경 감지
+    const ingredientSubscription = supabase
+      .channel(`ingredient-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ingredients_master',
+          filter: `id=eq.${id}`
+        },
+        (payload) => {
+          console.log('재료 데이터 변경 감지:', payload);
+          // 즐겨찾기 토글 중에는 실시간 업데이트 무시 (깜빡임 방지)
+          if (!isFavoriteToggling) {
+            fetchLatestIngredient();
+          }
+        }
+      )
+      .subscribe();
+
+    // 레시피 테이블 변경 감지 (레시피에서 이 재료 사용 시)
+    const recipeSubscription = supabase
+      .channel(`recipes-with-ingredient-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'recipes'
+        },
+        (payload) => {
+          console.log('레시피 데이터 변경 감지:', payload);
+          // 레시피가 변경되면 관련 레시피 목록 업데이트
+          fetchRelatedRecipes();
+        }
+      )
+      .subscribe();
+
+    // 클린업 함수
+    return () => {
+      ingredientSubscription.unsubscribe();
+      recipeSubscription.unsubscribe();
+    };
+  }, [id, fetchLatestIngredient, fetchRelatedRecipes]);
+
+  // 재료 동기화 버전 변경 시 데이터 업데이트
+  useEffect(() => {
+    if (id) {
+      fetchLatestIngredient();
+    }
+  }, [ingredientSyncVersion, fetchLatestIngredient]);
 
   // 즐겨찾기 토글
   const toggleFavorite = async () => {
     if (!ingredient?.id) return;
+    if (isFavoriteToggling) return; // 중복 클릭 방지
+    
+    setIsFavoriteToggling(true);
     const newVal = !isFavorite;
-    setIsFavorite(newVal);
-    await supabase
-      .from("ingredients_master")
-      .update({ is_favorite: newVal })
-      .eq("id", ingredient.id);
-    triggerIngredientSync(); // 동기화 트리거
+    try {
+      setIsFavorite(newVal); // 로컬 상태 즉시 업데이트
+      await supabase
+        .from("ingredients_master")
+        .update({ is_favorite: newVal })
+        .eq("id", ingredient.id);
+    } catch (error) {
+      console.error('재료 즐겨찾기 토글 실패:', error);
+      // 실패 시 원래 상태로 복원
+      setIsFavorite(!newVal);
+    } finally {
+      // 토글 완료 후 잠시 대기 후 실시간 구독 재활성화
+      setTimeout(() => {
+        setIsFavoriteToggling(false);
+      }, 1000);
+    }
   };
 
   // 구매링크 저장 핸들러

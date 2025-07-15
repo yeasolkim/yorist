@@ -129,16 +129,14 @@ export const getRecipes = (): Recipe[] => {
 };
 
 // 모든 레시피 조회 (Supabase 우선, localStorage 폴백)
-export const getRecipesAsync = async (): Promise<Recipe[]> => {
+export const getRecipesAsync = async (limit = 20, offset = 0): Promise<Recipe[]> => {
   try {
     // Supabase에서 조회 시도
-    const supabaseRecipes = await recipeService.getAllRecipes();
-    
+    const supabaseRecipes = await recipeService.getAllRecipes(limit, offset);
     if (supabaseRecipes.length > 0) {
       console.log('Supabase에서 레시피 조회 성공:', supabaseRecipes.length);
       return supabaseRecipes;
     }
-    
     // Supabase 실패 시 localStorage 폴백
     console.warn('Supabase 조회 실패, localStorage로 폴백');
     const data = safeLocalStorage.get(RECIPES_STORAGE_KEY);

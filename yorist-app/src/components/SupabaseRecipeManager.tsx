@@ -20,6 +20,8 @@ export default function SupabaseRecipeManager({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // 즐겨찾기 토글 중 상태 (깜빡임 방지용)
+  const [favoriteTogglingIds, setFavoriteTogglingIds] = useState<Set<string>>(new Set());
 
   // 레시피 목록 로드
   const loadRecipes = async () => {
@@ -87,16 +89,31 @@ export default function SupabaseRecipeManager({
 
   // 즐겨찾기 토글
   const handleToggleFavorite = async (recipeId: string, currentFavorite: boolean) => {
+    if (favoriteTogglingIds.has(recipeId)) return; // 중복 클릭 방지
+    
+    setFavoriteTogglingIds(prev => new Set(prev).add(recipeId));
     try {
       const success = await recipeService.toggleFavorite(recipeId, !currentFavorite);
       if (success) {
-        // 성공 시 레시피 목록 새로고침
-        const updatedRecipes = await recipeService.getAllRecipes();
-        setRecipes(updatedRecipes);
+        // 로컬 상태만 즉시 업데이트 (실시간 구독에 의존)
+        setRecipes(prev => prev.map(recipe => 
+          recipe.id === recipeId 
+            ? { ...recipe, isfavorite: !currentFavorite }
+            : recipe
+        ));
       }
     } catch (error) {
       console.error('즐겨찾기 토글 실패:', error);
-      }
+    } finally {
+      // 토글 완료 후 잠시 대기 후 토글 중 상태 해제
+      setTimeout(() => {
+        setFavoriteTogglingIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(recipeId);
+          return newSet;
+        });
+      }, 1000);
+    }
   };
 
   // 레시피 변환 함수 (DB 필드명과 일치)

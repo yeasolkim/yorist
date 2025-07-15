@@ -47,19 +47,35 @@ export const toDbIngredients = (ingredients: RecipeIngredient[]) =>
 // 레시피 관련 데이터베이스 함수들
 export const recipeService = {
   // 모든 레시피 조회
-  async getAllRecipes(): Promise<Recipe[]> {
+  async getAllRecipes(limit = 20, offset = 0): Promise<Recipe[]> {
     try {
       const { data, error } = await supabase
         .from('recipes')
         .select('*')
-        .order('createdat', { ascending: false }) // DB 필드명과 일치
+        .order('createdat', { ascending: false })
+        .range(offset, offset + limit - 1);
 
       if (error) {
         console.error('레시피 조회 실패:', error)
         throw error
       }
 
-      return (data || []).map(convertFromSupabaseRecipe)
+      // 레시피 데이터를 Recipe 타입으로 변환
+      const recipes = (data || []).map(convertFromSupabaseRecipe);
+      
+      // 각 레시피의 재료 정보를 최신으로 업데이트
+      const updatedRecipes = await Promise.all(
+        recipes.map(async (recipe) => {
+          try {
+            return await updateRecipeWithLatestIngredients(recipe);
+          } catch (error) {
+            console.error('재료 정보 업데이트 실패:', error);
+            return recipe;
+          }
+        })
+      );
+
+      return updatedRecipes;
     } catch (error) {
       console.error('레시피 조회 중 오류 발생:', error)
       return []
@@ -80,7 +96,18 @@ export const recipeService = {
         return null
       }
 
-      return data ? convertFromSupabaseRecipe(data) : null
+      if (!data) return null;
+
+      // 레시피 데이터를 Recipe 타입으로 변환
+      const recipe = convertFromSupabaseRecipe(data);
+      
+      // 재료 정보를 최신으로 업데이트
+      try {
+        return await updateRecipeWithLatestIngredients(recipe);
+      } catch (error) {
+        console.error('재료 정보 업데이트 실패:', error);
+        return recipe;
+      }
     } catch (error) {
       console.error('레시피 조회 중 오류 발생:', error)
       return null
@@ -168,7 +195,22 @@ export const recipeService = {
         throw error
       }
 
-      return (data || []).map(convertFromSupabaseRecipe)
+      // 레시피 데이터를 Recipe 타입으로 변환
+      const recipes = (data || []).map(convertFromSupabaseRecipe);
+      
+      // 각 레시피의 재료 정보를 최신으로 업데이트
+      const updatedRecipes = await Promise.all(
+        recipes.map(async (recipe) => {
+          try {
+            return await updateRecipeWithLatestIngredients(recipe);
+          } catch (error) {
+            console.error('재료 정보 업데이트 실패:', error);
+            return recipe;
+          }
+        })
+      );
+
+      return updatedRecipes;
     } catch (error) {
       console.error('레시피 검색 중 오류 발생:', error)
       return []
@@ -195,3 +237,180 @@ export const recipeService = {
     }
   }
 } 
+
+// 실시간 데이터 동기화를 위한 유틸리티 함수들
+
+/**
+ * 레시피 데이터의 실시간 구독을 설정하는 함수
+ * @param recipeId 레시피 ID
+ * @param onUpdate 데이터 업데이트 시 호출될 콜백 함수
+ * @returns 구독 해제 함수
+ */
+export const subscribeToRecipeChanges = (
+  recipeId: string, 
+  onUpdate: (payload: any) => void
+) => {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const subscription = supabase
+    .channel(`recipe-${recipeId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'recipes',
+        filter: `id=eq.${recipeId}`
+      },
+      onUpdate
+    )
+    .subscribe();
+
+  return () => {
+    subscription.unsubscribe();
+  };
+};
+
+/**
+ * 재료 데이터의 실시간 구독을 설정하는 함수
+ * @param ingredientId 재료 ID
+ * @param onUpdate 데이터 업데이트 시 호출될 콜백 함수
+ * @returns 구독 해제 함수
+ */
+export const subscribeToIngredientChanges = (
+  ingredientId: string, 
+  onUpdate: (payload: any) => void
+) => {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const subscription = supabase
+    .channel(`ingredient-${ingredientId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'ingredients_master',
+        filter: `id=eq.${ingredientId}`
+      },
+      onUpdate
+    )
+    .subscribe();
+
+  return () => {
+    subscription.unsubscribe();
+  };
+};
+
+/**
+ * 재료 마스터 테이블의 전체 변경사항을 구독하는 함수
+ * @param onUpdate 데이터 업데이트 시 호출될 콜백 함수
+ * @returns 구독 해제 함수
+ */
+export const subscribeToAllIngredientChanges = (
+  onUpdate: (payload: any) => void
+) => {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const subscription = supabase
+    .channel('ingredients-master')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'ingredients_master'
+      },
+      onUpdate
+    )
+    .subscribe();
+
+  return () => {
+    subscription.unsubscribe();
+  };
+};
+
+/**
+ * 레시피 테이블의 전체 변경사항을 구독하는 함수
+ * @param onUpdate 데이터 업데이트 시 호출될 콜백 함수
+ * @returns 구독 해제 함수
+ */
+export const subscribeToAllRecipeChanges = (
+  onUpdate: (payload: any) => void
+) => {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const subscription = supabase
+    .channel('recipes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'recipes'
+      },
+      onUpdate
+    )
+    .subscribe();
+
+  return () => {
+    subscription.unsubscribe();
+  };
+};
+
+/**
+ * 레시피의 재료 정보를 최신으로 업데이트하는 함수
+ * @param recipe 현재 레시피 데이터
+ * @returns 업데이트된 레시피 데이터
+ */
+export const updateRecipeWithLatestIngredients = async (recipe: any) => {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  try {
+    const ingredientIds = recipe.ingredients
+      .map((ing: any) => ing.ingredient_id)
+      .filter(Boolean);
+
+    if (ingredientIds.length === 0) return recipe;
+
+    const { data, error } = await supabase
+      .from('ingredients_master')
+      .select('id, name, shop_url')
+      .in('id', ingredientIds);
+
+    if (error) {
+      console.error('재료 정보 업데이트 실패:', error);
+      return recipe;
+    }
+
+    // 최신 재료 정보로 merge
+    const updatedIngredients = recipe.ingredients.map((ing: any) => {
+      const master = data?.find((row: any) => row.id === ing.ingredient_id);
+      return {
+        ...ing,
+        name: master?.name || ing.name,
+        shop_url: master?.shop_url || ing.shop_url
+      };
+    });
+
+    return { ...recipe, ingredients: updatedIngredients };
+  } catch (error) {
+    console.error('재료 정보 업데이트 중 오류:', error);
+    return recipe;
+  }
+}; 

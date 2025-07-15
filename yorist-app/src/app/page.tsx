@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
 import { Recipe, NavigationTab, RecipeIngredient } from '@/lib/types';
@@ -13,11 +13,12 @@ import FavoritesPage from '@/components/FavoritesPage';
 import YoristHeader from '@/components/YoristHeader';
 import RecipeCard from '@/components/RecipeCard';
 import ManualRecipeForm from '@/components/ManualRecipeForm';
-import { recipeService } from '@/lib/supabase';
+import { recipeService, subscribeToAllRecipeChanges, subscribeToAllIngredientChanges } from '@/lib/supabase';
 import CookingLoader from '@/components/CookingLoader';
 import BackgroundImage from '@/components/BackgroundImage';
 import AddIngredientForm from '@/components/AddIngredientForm';
 import ShortsRecipeAnalyzePage from '@/components/ShortsRecipeAnalyzePage';
+import { supabase } from '@/lib/supabase';
 
 export default function HomePage() {
   const router = useRouter();
@@ -42,6 +43,21 @@ export default function HomePage() {
   const [showAddIngredient, setShowAddIngredient] = useState(false);
   // FAB(플로팅 액션 버튼) 메뉴 상태
   const [showFabMenu, setShowFabMenu] = useState(false);
+
+  // 레시피 데이터를 최신으로 fetch하는 함수
+  const fetchLatestRecipes = useCallback(async () => {
+    setLoading(true);
+    try {
+      const recipes = await getRecipesAsync();
+      setSavedRecipes(recipes);
+      setFavorites(new Set(recipes.filter(r => r.isfavorite).map(r => r.id)));
+    } catch (error) {
+      console.error('레시피 데이터 fetch 실패:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // FAB 메뉴 외부 클릭 시 닫기
   useEffect(() => {
     if (!showFabMenu) return;
@@ -53,17 +69,132 @@ export default function HomePage() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showFabMenu]);
 
-  // Supabase에서 레시피 불러오기 (최초 1회 + 탭 변경 시)
+  // 초기 데이터 로드
   useEffect(() => {
-    const fetchRecipes = async () => {
-      setLoading(true);
-      const recipes = await getRecipesAsync();
-      setSavedRecipes(recipes);
-      setFavorites(new Set(recipes.filter(r => r.isfavorite).map(r => r.id))); // DB 필드명과 일치
-      setLoading(false);
-    };
-    fetchRecipes();
+    fetchLatestRecipes();
+  }, [fetchLatestRecipes]);
+
+  // 무한 스크롤용 상태 (레시피북 탭 전용)
+  const [recipebookRecipes, setRecipebookRecipes] = useState<Recipe[]>([]);
+  const [recipebookPage, setRecipebookPage] = useState(0);
+  const [recipebookHasMore, setRecipebookHasMore] = useState(true);
+  const [recipebookLoading, setRecipebookLoading] = useState(false);
+  const loaderRef = useRef<HTMLDivElement>(null);
+
+  // 레시피북 탭 무한 스크롤 fetch 함수
+  const fetchMoreRecipebookRecipes = async () => {
+    if (recipebookLoading || !recipebookHasMore) return;
+    setRecipebookLoading(true);
+    const newRecipes = await getRecipesAsync(20, recipebookPage * 20);
+    setRecipebookRecipes(prev => [...prev, ...newRecipes]);
+    setRecipebookPage(prev => prev + 1);
+    if (newRecipes.length < 20) setRecipebookHasMore(false);
+    setRecipebookLoading(false);
+  };
+
+  // 레시피북 탭 진입/탭 변경 시 초기화 및 첫 fetch
+  useEffect(() => {
+    if (activeTab === 'recipebook') {
+      setRecipebookRecipes([]);
+      setRecipebookPage(0);
+      setRecipebookHasMore(true);
+      setRecipebookLoading(false);
+    }
   }, [activeTab]);
+  useEffect(() => {
+    if (activeTab === 'recipebook' && recipebookPage === 0 && !recipebookLoading) {
+      fetchMoreRecipebookRecipes();
+    }
+  }, [activeTab, recipebookPage]);
+
+  // IntersectionObserver로 하단 감지
+  useEffect(() => {
+    if (activeTab !== 'recipebook') return;
+    if (!loaderRef.current) return;
+    const observer = new window.IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting) fetchMoreRecipebookRecipes();
+      },
+      { threshold: 1 }
+    );
+    observer.observe(loaderRef.current);
+    return () => observer.disconnect();
+  }, [activeTab, loaderRef.current, recipebookLoading, recipebookHasMore]);
+
+  // 전체 레시피 개수 상태 (레시피북 탭)
+  const [totalRecipeCount, setTotalRecipeCount] = useState<number>(0);
+
+  // 전체 레시피 개수 fetch 함수
+  const fetchTotalRecipeCount = async () => {
+    const { count } = await supabase
+      .from('recipes')
+      .select('*', { count: 'exact', head: true });
+    setTotalRecipeCount(count || 0);
+  };
+
+  // 레시피북 탭 진입 시 전체 개수 fetch
+  useEffect(() => {
+    if (activeTab === 'recipebook') fetchTotalRecipeCount();
+  }, [activeTab]);
+
+  // 레시피북 탭 실시간 업데이트를 위한 최신 데이터 fetch 함수
+  const fetchLatestRecipebookData = useCallback(async () => {
+    if (activeTab !== 'recipebook') return;
+    
+    try {
+      // 현재 페이지까지의 모든 레시피를 다시 fetch
+      const allRecipes = await getRecipesAsync(recipebookPage * 20, 0);
+      setRecipebookRecipes(allRecipes);
+      
+      // 즐겨찾기 상태도 업데이트
+      setFavorites(new Set(allRecipes.filter(r => r.isfavorite).map(r => r.id)));
+      
+      // 전체 개수도 업데이트
+      await fetchTotalRecipeCount();
+    } catch (error) {
+      console.error('레시피북 실시간 업데이트 실패:', error);
+    }
+  }, [activeTab, recipebookPage]);
+
+  // Supabase 실시간 구독 설정 (레시피북 탭 포함)
+  useEffect(() => {
+    // 레시피 테이블 변경 감지
+    const recipeUnsubscribe = subscribeToAllRecipeChanges((payload) => {
+      console.log('홈화면: 레시피 데이터 변경 감지:', payload);
+      
+      // 현재 활성 탭에 따라 다른 처리
+      if (activeTab === 'recipebook') {
+        // 레시피북 탭에서는 무한 스크롤 상태를 고려하여 업데이트
+        fetchLatestRecipebookData();
+      } else {
+        // 다른 탭에서는 기존 방식대로 처리
+        fetchLatestRecipes();
+      }
+    });
+
+    // 재료 마스터 테이블 변경 감지 (재료 정보 업데이트 시)
+    const ingredientUnsubscribe = subscribeToAllIngredientChanges((payload) => {
+      console.log('홈화면: 재료 데이터 변경 감지:', payload);
+      
+      // 재료 정보가 변경되면 모든 탭에서 레시피 목록 업데이트
+      if (activeTab === 'recipebook') {
+        fetchLatestRecipebookData();
+      } else {
+        fetchLatestRecipes();
+      }
+    });
+
+    // 클린업 함수
+    return () => {
+      recipeUnsubscribe();
+      ingredientUnsubscribe();
+    };
+  }, [fetchLatestRecipes, fetchLatestRecipebookData, activeTab]);
+
+  // 탭 변경 시 데이터 새로고침
+  useEffect(() => {
+    fetchLatestRecipes();
+  }, [activeTab, fetchLatestRecipes]);
 
   // 쿼리 파라미터(tab)로 진입 시 해당 탭 자동 활성화
   useEffect(() => {
@@ -76,11 +207,43 @@ export default function HomePage() {
   // 즐겨찾기 토글 (Supabase 연동)
   const handleFavoriteToggle = async (recipeId: string, currentFavorite: boolean) => {
     console.log('[handleFavoriteToggle 호출]', { recipeId, currentFavorite }); // 클릭 시 호출 여부 확인
-    await recipeService.toggleFavorite(recipeId, !currentFavorite);
-    // 토글 후 전체 레시피 목록 새로고침
-    const recipes = await recipeService.getAllRecipes();
-    setSavedRecipes(recipes);
-    setFavorites(new Set(recipes.filter(r => r.isfavorite).map(r => r.id))); // DB 필드명과 일치
+    try {
+      await recipeService.toggleFavorite(recipeId, !currentFavorite);
+      // 실시간 구독으로 자동 업데이트되므로 별도 새로고침 불필요
+      // 로컬 상태만 즉시 업데이트하여 UX 개선
+      setFavorites(prev => {
+        const newFavorites = new Set(prev);
+        if (!currentFavorite) {
+          newFavorites.add(recipeId);
+        } else {
+          newFavorites.delete(recipeId);
+        }
+        return newFavorites;
+      });
+      
+      // 레시피북 탭에서도 즉시 업데이트 (무한 스크롤 상태 고려)
+      if (activeTab === 'recipebook') {
+        setRecipebookRecipes(prev => 
+          prev.map(recipe => 
+            recipe.id === recipeId 
+              ? { ...recipe, isfavorite: !currentFavorite }
+              : recipe
+          )
+        );
+      }
+    } catch (error) {
+      console.error('즐겨찾기 토글 실패:', error);
+      // 실패 시 원래 상태로 복원
+      setFavorites(prev => {
+        const newFavorites = new Set(prev);
+        if (currentFavorite) {
+          newFavorites.add(recipeId);
+        } else {
+          newFavorites.delete(recipeId);
+        }
+        return newFavorites;
+      });
+    }
   };
 
   // 탭 변경
@@ -91,14 +254,17 @@ export default function HomePage() {
   // 레시피 저장
   const handleSaveRecipe = async (recipe: Recipe) => {
     setLoading(true);
-    const success = await saveRecipeAsync(recipe);
-    if (success) {
-      const recipes = await getRecipesAsync();
-      setSavedRecipes(recipes);
-      setFavorites(new Set(recipes.filter(r => r.isfavorite).map(r => r.id))); // DB 필드명과 일치
-      setActiveTab('home');
+    try {
+      const success = await saveRecipeAsync(recipe);
+      if (success) {
+        // 실시간 구독으로 자동 업데이트되므로 별도 새로고침 불필요
+        setActiveTab('home');
+      }
+    } catch (error) {
+      console.error('레시피 저장 실패:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleManualFormSave = async (recipe: Recipe) => {
@@ -274,7 +440,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="relative min-h-screen bg-black pb-24">
+    <main className="relative min-h-screen bg-black pb-24 max-w-md mx-auto w-full"> {/* 너비 제한 추가 */}
       {/* 전체 탭 공통 반투명 배경 이미지 */}
       <BackgroundImage />
       {/* 실제 내용 */}
@@ -361,7 +527,7 @@ export default function HomePage() {
             className="absolute inset-0 cursor-pointer"
             onClick={handleManualFormCancel}
           />
-          <div className="relative z-10 w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
+          <div className="relative z-10 w-full mx-auto max-h-[90vh] overflow-y-auto"> {/* 중복된 너비 제한 제거 */}
             <ManualRecipeForm
               onSave={handleManualFormSave}
               onCancel={handleManualFormCancel}
@@ -380,7 +546,7 @@ export default function HomePage() {
             </svg>
           </div>
           {/* 유튜브 링크 입력 카드형 컨테이너 */}
-          <div className="w-full max-w-md mx-auto bg-[#181818] rounded-2xl shadow-lg p-6 mb-6 flex flex-col items-center">
+          <div className="w-full mx-auto bg-[#181818] rounded-2xl shadow-lg p-6 mb-6 flex flex-col items-center"> {/* 중복된 너비 제한 제거 */}
             <label className="block text-white font-bold text-lg mb-3 w-full text-left">유튜브 링크 입력</label>
             <input
               type="text"
@@ -392,7 +558,7 @@ export default function HomePage() {
           </div>
           {/* 유튜브 링크 입력 시 하단 UI가 자연스럽게 등장 */}
           {activeTab === 'home' && youtubeUrl && youtubeUrl.startsWith('https://youtube.com/shorts/') ? (
-            <div className="w-full max-w-md mx-auto transition-all duration-500 animate-slideIn">
+            <div className="w-full mx-auto transition-all duration-500 animate-slideIn"> {/* 중복된 너비 제한 제거 */}
               <ShortsRecipeAnalyzePage 
                 youtubeUrl={youtubeUrl} 
                 onRecipeGenerated={(recipe: Recipe) => {
@@ -402,7 +568,7 @@ export default function HomePage() {
               />
             </div>
           ) : activeTab === 'home' && youtubeUrl && (
-            <div className="w-full max-w-md mx-auto transition-all duration-500 animate-slideIn">
+            <div className="w-full mx-auto transition-all duration-500 animate-slideIn"> {/* 중복된 너비 제한 제거 */}
               {/* 레시피 자동 생성 버튼 및 로딩/에러 UI - 프롬프트 카드 위로 이동 */}
               <div className="mb-4">
                 {isGenerating ? (
@@ -475,23 +641,27 @@ export default function HomePage() {
 
       {/* 레시피북 탭 */}
       {activeTab === 'recipebook' && (
-        <div className="animate-fadeIn pb-28 max-w-md mx-auto w-full"> {/* 모바일 기준 너비 고정 및 중앙정렬 */}
+        <div className="animate-fadeIn pb-24"> {/* 중복된 너비 제한 제거 */}
           {/* 수동 레시피 추가 버튼 및 폼 */}
           {/* ManualRecipeForm은 모달로 대체되므로 여기서는 표시하지 않음 */}
           {/* 레시피북 섹션 */}
           <RecipeSection
-            title="나의 레시피북"
-            recipes={savedRecipes}
+            title="나의 요리스트"
+            recipes={recipebookRecipes}
+            totalCount={totalRecipeCount}
             onRecipeClick={recipe => router.push(`/recipe/${recipe.id}`)}
             onFavoriteToggle={(id, isfavorite) => handleFavoriteToggle(id, isfavorite)}
             favorites={favorites}
           />
+          <div ref={loaderRef} style={{ height: 32 }} />
+          {recipebookLoading && <div className="text-center text-orange-400 py-2">로딩 중...</div>}
+          {!recipebookHasMore && <div className="text-center text-gray-500 py-2">모든 레시피를 불러왔습니다.</div>}
         </div>
       )}
 
       {/* 검색 탭 */}
       {activeTab === 'search' && (
-        <div className="animate-fadeIn pb-28">
+        <div className="animate-fadeIn pb-24"> {/* 중복된 너비 제한 제거 */}
           <SearchPage
             onRecipeClick={recipe => router.push(`/recipe/${recipe.id}`)}
             onFavoriteToggle={handleFavoriteToggle}
@@ -502,7 +672,7 @@ export default function HomePage() {
 
       {/* 즐겨찾기 탭 */}
       {activeTab === 'favorites' && (
-        <div className="animate-fadeIn pb-28">
+        <div className="animate-fadeIn pb-24"> {/* 중복된 너비 제한 제거 */}
           <FavoritesPage
             onRecipeClick={recipe => router.push(`/recipe/${recipe.id}`)}
             onFavoriteToggle={handleFavoriteToggle}
