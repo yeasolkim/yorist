@@ -85,8 +85,8 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
       } else {
         // 새 재료 생성
         const newIngredientId = await createIngredient({
-          name: ingredientName.trim(),
-          unit: ingredientUnit.trim() || '개',
+            name: ingredientName.trim(),
+            unit: ingredientUnit.trim() || '개',
           shop_url: ingredientShopUrl.trim() || undefined,
           is_favorite: false
         });
@@ -187,8 +187,8 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
       // ingredients_master 테이블 업데이트
       if (originalIngredient.ingredient_id) {
         await updateIngredient(originalIngredient.ingredient_id, {
-          name: editIngredientName,
-          unit: editIngredientUnit,
+            name: editIngredientName,
+            unit: editIngredientUnit,
           shop_url: editIngredientShopUrl || undefined
         });
       }
@@ -379,13 +379,13 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
                           placeholder="단위"
                           className="w-24 bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
                         />
-                        <input
-                          type="text"
-                          value={editIngredientShopUrl}
-                          onChange={e => setEditIngredientShopUrl(e.target.value)}
-                          placeholder="구매링크"
+                      <input
+                        type="text"
+                        value={editIngredientShopUrl}
+                        onChange={e => setEditIngredientShopUrl(e.target.value)}
+                        placeholder="구매링크"
                           className="flex-1 min-w-0 max-w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
-                        />
+                      />
                       </div>
                       <div className="flex gap-2 mt-1">
                         <button
@@ -453,27 +453,27 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
                 
                 {/* 수량 및 단위 입력 */}
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={ingredientAmount}
-                    onChange={e => setIngredientAmount(e.target.value)}
-                    placeholder="수량"
-                    className="w-20 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
-                  />
-                  <input
-                    type="text"
-                    value={ingredientUnit}
-                    onChange={e => setIngredientUnit(e.target.value)}
-                    placeholder="단위 (개, g, ml 등)"
-                    className="w-24 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
-                  />
-                  <input
-                    type="text"
-                    value={ingredientShopUrl}
-                    onChange={e => setIngredientShopUrl(e.target.value)}
-                    placeholder="구매링크 (선택)"
+                <input
+                  type="text"
+                  value={ingredientAmount}
+                  onChange={e => setIngredientAmount(e.target.value)}
+                  placeholder="수량"
+                  className="w-20 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
+                />
+                <input
+                  type="text"
+                  value={ingredientUnit}
+                  onChange={e => setIngredientUnit(e.target.value)}
+                  placeholder="단위 (개, g, ml 등)"
+                  className="w-24 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
+                />
+                <input
+                  type="text"
+                  value={ingredientShopUrl}
+                  onChange={e => setIngredientShopUrl(e.target.value)}
+                  placeholder="구매링크 (선택)"
                     className="flex-1 min-w-0 max-w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
-                  />
+                />
                 </div>
               </div>
               <button

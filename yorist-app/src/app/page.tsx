@@ -182,6 +182,9 @@ export default function HomePage() {
       } else {
         fetchLatestRecipes();
       }
+      
+      // 검색 탭과 즐겨찾기 탭에서도 재료 정보가 변경되면 즉시 반영
+      // (각 컴포넌트 내부에서 ingredientSyncVersion을 통해 자동 업데이트됨)
     });
 
     // 클린업 함수

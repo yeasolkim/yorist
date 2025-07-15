@@ -26,7 +26,8 @@ export default function SearchPage({
   const [loading, setLoading] = useState(false);
   const [ingredientResults, setIngredientResults] = useState<any[]>([]);
   const [popularIngredients, setPopularIngredients] = useState<any[]>([]);
-  //  const [sortBy, setSortBy] = useState<'name' | 'favorite' | 'recent'>('favorite');
+  // 재료 즐겨찾기 토글 중 상태 (깜빡임 방지용)
+  const [ingredientFavoriteTogglingIds, setIngredientFavoriteTogglingIds] = useState<Set<string>>(new Set());
 
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
   const syncVersion = useRecipeSync();
@@ -70,43 +71,86 @@ export default function SearchPage({
         setKeywordSuggestions([]);
       })
       .finally(() => setLoading(false));
-    // 재료도 동기화
-    supabase
-      .from('ingredients_master')
-      .select('id, name, unit, shop_url, is_favorite, created_at')
-      .ilike('name', `%${searchQuery}%`)
-      .limit(10)
-      .then(({ data }) => {
-        let results = data || [];
-        setIngredientResults(results);
-      });
+    
+    // 재료 검색 (실시간 업데이트를 위해 최신 정보로 fetch)
+    const fetchIngredientResults = async () => {
+      try {
+        const { data } = await supabase
+          .from('ingredients_master')
+          .select('id, name, unit, shop_url, is_favorite, created_at')
+          .ilike('name', `%${searchQuery}%`)
+          .limit(10);
+        
+        // 토글 중인 재료들의 상태를 유지
+        const updatedResults = (data || []).map(item => {
+          if (ingredientFavoriteTogglingIds.has(item.id)) {
+            // 토글 중인 경우 현재 로컬 상태 유지
+            const currentItem = ingredientResults.find(i => i.id === item.id);
+            return currentItem ? { ...item, is_favorite: currentItem.is_favorite } : item;
+          }
+          return item;
+        });
+        
+        setIngredientResults(updatedResults);
+      } catch (error) {
+        console.error('재료 검색 실패:', error);
+      }
+    };
+    
+    fetchIngredientResults();
   }, [searchQuery, syncVersion, ingredientSyncVersion]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
   };
 
-  // 하트 토글 함수 (DB update + optimistic UI)
+  // 하트 토글 함수 (DB update + optimistic UI + 깜빡임 방지)
   const toggleFavoriteIngredient = async (item: any) => {
     if (!item.id) return; // id 유효성 체크
+    
     const newVal = !item.is_favorite;
+    
+    // 토글 중 상태 추가 (깜빡임 방지)
+    setIngredientFavoriteTogglingIds(prev => new Set(prev).add(item.id));
+    
     // optimistic update
     setIngredientResults(results =>
       results.map(i => i.id === item.id ? { ...i, is_favorite: newVal } : i)
     );
-    await supabase
-      .from('ingredients_master')
-      .update({ is_favorite: newVal })
-      .eq('id', item.id);
-    // 최신 정보 refetch
-    const { data } = await supabase
-      .from('ingredients_master')
-      .select('is_favorite, shop_url')
-      .eq('id', item.id)
-      .single();
-    setIngredientResults(results =>
-      results.map(i => i.id === item.id ? { ...i, is_favorite: data?.is_favorite, shop_url: data?.shop_url } : i)
-    );
+    
+    try {
+      await supabase
+        .from('ingredients_master')
+        .update({ is_favorite: newVal })
+        .eq('id', item.id);
+      
+      // 실시간 동기화 트리거
+      triggerIngredientSync();
+      
+      // 최신 정보 refetch (토글 중 상태 해제 후)
+      const { data } = await supabase
+        .from('ingredients_master')
+        .select('is_favorite, shop_url')
+        .eq('id', item.id)
+        .single();
+      
+      setIngredientResults(results =>
+        results.map(i => i.id === item.id ? { ...i, is_favorite: data?.is_favorite, shop_url: data?.shop_url } : i)
+      );
+    } catch (error) {
+      console.error('즐겨찾기 토글 실패:', error);
+      // 실패 시 원래 상태로 복원
+      setIngredientResults(results =>
+        results.map(i => i.id === item.id ? { ...i, is_favorite: !newVal } : i)
+      );
+    } finally {
+      // 토글 중 상태 해제
+      setIngredientFavoriteTogglingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(item.id);
+        return newSet;
+      });
+    }
   };
 
   return (
@@ -205,7 +249,6 @@ export default function SearchPage({
                         e.preventDefault(); e.stopPropagation();
                         toggleFavoriteIngredient(item); 
                         triggerRecipeSync(); 
-                        triggerIngredientSync();
                       }}
                       className={`text-lg ${item.is_favorite ? 'text-orange-400' : 'text-gray-400'} hover:text-orange-300 transition`}
                       aria-label="즐겨찾기"
