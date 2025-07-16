@@ -2,7 +2,7 @@ import { Recipe } from '@/lib/types';
 import RecipeCard from './RecipeCard';
 
 interface RecipeSectionProps {
-  title: string;
+  title?: string;
   recipes: Recipe[];
   onRecipeClick?: (recipe: Recipe) => void;
   onFavoriteToggle?: (recipeId: string, currentFavorite: boolean) => void;
@@ -23,11 +23,13 @@ export default function RecipeSection({
   
   return (
     <section className="mb-4">
-      {/* 섹션 헤더 */}
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-white text-lg font-bold">{title}</h2>
-        <span className="text-gray-400 text-sm">{typeof totalCount === 'number' ? totalCount : recipes.length}개의 레시피</span>
-      </div>
+      {/* 섹션 헤더 - title이 있을 때만 렌더링 */}
+      {title && (
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-white text-lg font-bold">{title}</h2>
+          <span className="text-gray-400 text-sm">{typeof totalCount === 'number' ? totalCount : recipes.length}개의 레시피</span>
+        </div>
+      )}
       
       {/* 레시피 카드 목록 */}
       <div className="space-y-3">
@@ -35,7 +37,7 @@ export default function RecipeSection({
           <RecipeCard
             key={recipe.id}
             recipe={recipe}
-            onClick={() => onRecipeClick?.(recipe)}
+            onRecipeClick={() => onRecipeClick?.(recipe)}
             showFavorite={showFavorite}
             onFavoriteToggle={onFavoriteToggle}
             favorites={favorites}

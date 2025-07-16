@@ -1,8 +1,6 @@
 import { Recipe, RecipeIngredient, SupabaseRecipe } from './types';
 import { recipeService, convertToSupabaseRecipe, convertFromSupabaseRecipe } from './supabase';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabase } from './supabase';
 
 // ingredients_master 테이블과 연동하여 재료 처리
 const processIngredients = async (ingredients: RecipeIngredient[]): Promise<RecipeIngredient[]> => {

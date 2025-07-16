@@ -1,11 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-// Supabase 클라이언트 준비
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { supabase } from '../lib/supabase';
 
 interface AddIngredientFormProps {
   onClose: () => void;

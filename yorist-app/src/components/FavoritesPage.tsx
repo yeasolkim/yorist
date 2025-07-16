@@ -4,7 +4,7 @@ import { Recipe } from '@/lib/types';
 import { recipeService } from '@/lib/supabase';
 import RecipeCard from './RecipeCard';
 import { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { useRecipeSync, triggerRecipeSync } from '@/lib/recipeSync';
 import { useIngredientSync, triggerIngredientSync } from '@/lib/ingredientSync';
 import Link from 'next/link';
@@ -16,7 +16,7 @@ interface FavoritesPageProps {
 }
 
 const FAVORITES_SEEN_KEY = 'favorites_seen_ids'; // 로컬스토리지 키
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
 
 export default function FavoritesPage({ 
   onRecipeClick, 

@@ -3,10 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Recipe, RecipeStep, RecipeIngredient } from '@/lib/types';
-import { createClient } from '@supabase/supabase-js';
-
-// Supabase 클라이언트 준비
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabase } from '@/lib/supabase';
 
 export default function AddRecipePage() {
   const router = useRouter();

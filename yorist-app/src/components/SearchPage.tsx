@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Recipe } from '@/lib/types';
 import { recipeService } from '@/lib/supabase';
 import RecipeCard from './RecipeCard';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useRecipeSync, triggerRecipeSync } from '@/lib/recipeSync';
 import { useIngredientSync, triggerIngredientSync, getPopularIngredients, sortIngredients } from '@/lib/ingredientSync';
@@ -29,7 +29,7 @@ export default function SearchPage({
   // 재료 즐겨찾기 토글 중 상태 (깜빡임 방지용)
   const [ingredientFavoriteTogglingIds, setIngredientFavoriteTogglingIds] = useState<Set<string>>(new Set());
 
-  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  
   const syncVersion = useRecipeSync();
   const ingredientSyncVersion = useIngredientSync();
 
@@ -296,7 +296,7 @@ export default function SearchPage({
                 <RecipeCard
                   key={recipe.id}
                   recipe={recipe}
-                  onClick={() => onRecipeClick?.(recipe)}
+                  onRecipeClick={() => onRecipeClick?.(recipe)}
                   showFavorite={true}
                   onFavoriteToggle={(id) => onFavoriteToggle?.(id, favorites?.has(id) || false)}
                   favorites={favorites}

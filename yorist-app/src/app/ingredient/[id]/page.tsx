@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
 import RecipeCard from "@/components/RecipeCard";
 import YoristHeader from "@/components/YoristHeader";
 import BottomNavigation from "@/components/BottomNavigation";
@@ -10,11 +10,6 @@ import { Recipe } from "@/lib/types";
 import { useIngredientSync, triggerIngredientSync, findIngredientByName, mergeIngredients, updateIngredient } from '@/lib/ingredientSync';
 import Link from "next/link";
 import AutoCompleteIngredient from '@/components/AutoCompleteIngredient';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 export default function IngredientDetailPage() {
   const { id } = useParams();
@@ -291,164 +286,140 @@ export default function IngredientDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col animate-fadeIn">
+    <main className="min-h-screen px-4 pb-24 pt-6 max-w-md mx-auto">
       <YoristHeader />
-      {/* 뒤로가기 버튼 */}
-      <div className="flex items-center mt-2 mb-2 max-w-md mx-auto px-2 sm:px-4">
-        <button
-          onClick={() => router.back()}
-          className="p-2 rounded-full bg-[#232323] hover:bg-[#333] text-gray-300 hover:text-white transition-colors shadow-md border border-[#2a2a2a]"
-          aria-label="뒤로가기"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <span className="ml-3 text-white text-lg font-bold">재료 상세</span>
-      </div>
-      <main className="flex-1 w-full max-w-md mx-auto px-2 sm:px-4 pb-24">
-        {/* 재료 정보 섹션 */}
-        <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl p-4 sm:p-6 mt-4 mb-6 shadow-xl">
-          <div className="flex items-center justify-between mb-2">
-            {/* 재료명 + 수정 버튼 */}
-            <div className="flex items-center gap-2">
-              {editMode ? (
-                <AutoCompleteIngredient
-                  value={{
-                    ingredient_id: ingredient.id,
-                    name: editName,
-                    amount: '',
-                    unit: editUnit,
-                    shop_url: editShopUrl
-                  }}
-                  onChange={(ing) => {
-                    setEditName(ing.name);
-                    setEditUnit(ing.unit);
-                    setEditShopUrl(ing.shop_url || '');
-                  }}
-                  placeholder="재료명"
-                  className="w-full"
-                />
-              ) : (
-                <h1 className="text-xl sm:text-2xl font-bold text-white">{ingredient.name}</h1>
-              )}
-              {!editMode && (
-                <button
-                  onClick={handleEdit}
-                  className="ml-1 px-2 py-1 rounded-lg bg-[#232323] text-gray-400 hover:text-orange-400 hover:bg-[#333] text-xs font-bold border border-[#333] transition"
-                >
-                  수정
-                </button>
-              )}
+
+      {editMode ? (
+        <div className="bg-[#1a1a1a] rounded-2xl p-6 shadow-lg">
+          <h2 className="text-xl font-bold mb-4">재료 정보 수정</h2>
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">재료명</label>
+            <AutoCompleteIngredient
+              value={{
+                ingredient_id: ingredient.id,
+                name: editName,
+                amount: '',
+                unit: editUnit,
+                shop_url: editShopUrl
+              }}
+              onChange={(ingredient) => {
+                setEditName(ingredient.name);
+                setEditUnit(ingredient.unit);
+                setEditShopUrl(ingredient.shop_url || '');
+              }}
+              placeholder="재료명을 입력하세요"
+              className="w-full"
+              isEditMode={true}
+            />
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium mb-1">단위</label>
+            <input 
+              type="text" 
+              value={editUnit}
+              onChange={e => setEditUnit(e.target.value)}
+              className="w-full bg-[#2a2a2a] rounded-lg px-4 py-2"
+              placeholder="개, g, ml 등"
+            />
+          </div>
+          
+          <div className="mb-6">
+            <label className="block text-sm font-medium mb-1">구매링크</label>
+            <input 
+              type="text" 
+              value={editShopUrl}
+              onChange={e => setEditShopUrl(e.target.value)}
+              className="w-full bg-[#2a2a2a] rounded-lg px-4 py-2"
+              placeholder="https://..."
+            />
+          </div>
+
+          {editError && <p className="text-red-500 text-sm mb-4">{editError}</p>}
+          
+          <div className="flex gap-2">
+            <button onClick={handleSaveEdit} className="flex-1 bg-orange-500 text-white rounded-lg py-2 font-bold">저장</button>
+            <button onClick={handleCancelEdit} className="flex-1 bg-gray-600 text-white rounded-lg py-2">취소</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="mb-6 relative">
+            <button
+              onClick={() => router.back()}
+              className="absolute left-0 top-1/2 -translate-y-1/2 p-2 rounded-full bg-[#232323] hover:bg-[#2a2a2a] text-white flex items-center justify-center focus:outline-none transition-colors"
+              aria-label="뒤로가기"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            
+            <div className="flex flex-col items-center w-full px-12">
+              <h1 className="text-2xl font-bold text-white text-center">{ingredient.name}</h1>
+              <div className="w-1/2 h-1 bg-gradient-to-r from-orange-400 to-orange-500 rounded-full mx-auto mt-2"></div>
             </div>
-            {/* 즐겨찾기 하트 */}
+
             <button
               onClick={toggleFavorite}
-              className={`ml-2 text-2xl ${isFavorite ? 'text-orange-400' : 'text-gray-400'} hover:text-orange-300 transition`}
+              className={`absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full ${isFavorite ? 'text-orange-400' : 'text-gray-400'}`}
               aria-label="즐겨찾기"
             >
-              <svg className="w-6 h-6" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg className="w-6 h-6" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
               </svg>
             </button>
           </div>
-          {/* 수정 폼 */}
-          {editMode && (
-            <form
-              onSubmit={e => { e.preventDefault(); handleSaveEdit(); }}
-              className="flex flex-col gap-3 mt-2"
-            >
-              <div className="flex flex-col gap-2">
-                <input
-                  type="text"
-                  value={editUnit}
-                  onChange={e => setEditUnit(e.target.value)}
-                  className="w-full bg-[#232323] border border-[#333] text-white rounded-xl px-4 py-3 text-base focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition"
-                  placeholder="단위 (예: 개, g, ml 등)"
-                />
-                <input
-                  type="text"
-                  value={editShopUrl}
-                  onChange={e => setEditShopUrl(e.target.value)}
-                  className="w-full bg-[#232323] border border-[#333] text-white rounded-xl px-4 py-3 text-base focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition"
-                  placeholder="구매 가능한 URL (선택)"
-                />
-              </div>
-              {editError && (
-                <div className="text-red-500 text-sm font-medium mt-1 mb-1">{editError}</div>
-              )}
-              <div className="flex gap-2 mt-2 w-full">
-                <button
-                  type="submit"
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-orange-400 to-orange-500 text-white font-bold text-base shadow-lg hover:from-orange-500 hover:to-orange-600 transition"
-                >
-                  저장
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancelEdit}
-                  className="flex-1 py-3 rounded-xl bg-[#333] text-white font-bold text-base shadow-lg hover:bg-[#444] transition"
-                >
-                  취소
-                </button>
-              </div>
-            </form>
-          )}
-          {/* 구매링크 UI */}
-          {!editMode && ingredient.shop_url && (
-            <div className="flex flex-col gap-2 mt-2">
-              {/* 구매링크에 프로토콜이 없으면 https://를 자동으로 붙여줌 */}
-              <a
-                href={ingredient.shop_url?.startsWith('http') ? ingredient.shop_url : `https://${ingredient.shop_url}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block px-4 py-2 bg-orange-500 text-white rounded-full text-sm font-bold hover:bg-orange-600 transition text-center"
-              >
-                구매하러 가기
-              </a>
+
+          <div className="bg-[#1a1a1a] rounded-2xl p-6 mb-6 shadow-lg">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-medium">구매 링크</h2>
+              <button onClick={() => setShowShopUrlEdit(!showShopUrlEdit)} className="text-orange-400 text-sm">
+                {showShopUrlEdit ? '닫기' : '수정'}
+              </button>
             </div>
-          )}
-          {/* 삭제 버튼 - 카드 하단 */}
-          <div className="flex justify-end mt-6">
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white rounded-xl px-4 py-2 font-bold shadow-md transition-all disabled:opacity-60"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+
+            {showShopUrlEdit ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={shopUrlInput}
+                  onChange={(e) => setShopUrlInput(e.target.value)}
+                  className="flex-1 bg-[#2a2a2a] rounded-lg px-4 py-2"
+                  placeholder="https://..."
+                />
+                <button onClick={handleSaveShopUrl} className="bg-orange-500 text-white px-4 rounded-lg font-bold">저장</button>
+              </div>
+            ) : (
+              ingredient.shop_url ? (
+                <a href={ingredient.shop_url} target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:underline break-all">
+                  {ingredient.shop_url}
+                </a>
+              ) : <p className="text-gray-400">등록된 링크가 없습니다.</p>
+            )}
+          </div>
+
+          <div className="mb-6">
+            <h2 className="text-xl font-bold mb-4">이 재료를 사용하는 레시피 ({recipes.length})</h2>
+            <div className="space-y-4">
+              {recipes.map(recipe => (
+                <RecipeCard key={recipe.id} recipe={recipe} onRecipeClick={() => router.push(`/recipe/${recipe.id}`)} />
+              ))}
+            </div>
+            {recipes.length === 0 && <p className="text-gray-400 text-center py-4">관련 레시피가 없습니다.</p>}
+          </div>
+
+          <div className="flex gap-2 mt-8">
+            <button onClick={handleEdit} className="flex-1 bg-gray-700 text-white rounded-lg py-3 font-bold">수정</button>
+            <button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white rounded-lg py-3 font-bold disabled:bg-gray-500">
               {deleting ? '삭제 중...' : '삭제'}
             </button>
           </div>
-        </div>
+        </>
+      )}
 
-        {/* 해당 재료를 사용하는 레시피 목록 */}
-        <div className="mb-8">
-          <h2 className="text-lg sm:text-xl font-bold text-white mb-3">이 재료를 사용하는 레시피</h2>
-          {recipes.length === 0 ? (
-            <div className="text-gray-400 text-sm">관련 레시피가 없습니다.</div>
-          ) : (
-            <div className="space-y-4">
-              {recipes.map(recipe => (
-                // 레시피 카드를 클릭하면 해당 레시피 상세 페이지로 이동
-                <Link key={recipe.id} href={`/recipe/${recipe.id}`} passHref legacyBehavior>
-                  <a style={{ display: 'block' }}>
-                    <RecipeCard recipe={recipe} />
-                  </a>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-      <BottomNavigation
-        activeTab="home"
-        onTabChange={(tab) => {
-          if (tab === 'home') router.push('/');
-          else if (tab === 'recipebook') router.push('/?tab=recipebook');
-          else if (tab === 'favorites') router.push('/?tab=favorites');
-          else if (tab === 'search') router.push('/?tab=search');
-        }}
-      />
-    </div>
+      <BottomNavigation activeTab="recipebook" onTabChange={(tab) => router.push(`/?tab=${tab}`)} />
+    </main>
   );
 } 

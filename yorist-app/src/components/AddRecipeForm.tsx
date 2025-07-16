@@ -3,12 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Recipe, RecipeStep } from '@/lib/types';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 import RecipeGeneratePage from './RecipeGeneratePage';
 import ManualRecipeForm from './ManualRecipeForm';
-
-// Supabase 클라이언트 준비
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 interface AddRecipeFormProps {
   onSave?: (recipe: Recipe) => void;

@@ -43,6 +43,7 @@ export default function HomePage() {
   const [showAddIngredient, setShowAddIngredient] = useState(false);
   // FAB(플로팅 액션 버튼) 메뉴 상태
   const [showFabMenu, setShowFabMenu] = useState(false);
+  const [isFavoriteToggling, setIsFavoriteToggling] = useState<Set<string>>(new Set());
 
   // 레시피 데이터를 최신으로 fetch하는 함수
   const fetchLatestRecipes = useCallback(async () => {
@@ -165,10 +166,10 @@ export default function HomePage() {
       // 현재 활성 탭에 따라 다른 처리
       if (activeTab === 'recipebook') {
         // 레시피북 탭에서는 무한 스크롤 상태를 고려하여 업데이트
-        fetchLatestRecipebookData();
+        if (isFavoriteToggling.size === 0) fetchLatestRecipebookData();
       } else {
         // 다른 탭에서는 기존 방식대로 처리
-        fetchLatestRecipes();
+        if (isFavoriteToggling.size === 0) fetchLatestRecipes();
       }
     });
 
@@ -178,9 +179,9 @@ export default function HomePage() {
       
       // 재료 정보가 변경되면 모든 탭에서 레시피 목록 업데이트
       if (activeTab === 'recipebook') {
-        fetchLatestRecipebookData();
+        if (isFavoriteToggling.size === 0) fetchLatestRecipebookData();
       } else {
-        fetchLatestRecipes();
+        if (isFavoriteToggling.size === 0) fetchLatestRecipes();
       }
       
       // 검색 탭과 즐겨찾기 탭에서도 재료 정보가 변경되면 즉시 반영
@@ -192,7 +193,7 @@ export default function HomePage() {
       recipeUnsubscribe();
       ingredientUnsubscribe();
     };
-  }, [fetchLatestRecipes, fetchLatestRecipebookData, activeTab]);
+  }, [fetchLatestRecipes, fetchLatestRecipebookData, activeTab, isFavoriteToggling]);
 
   // 탭 변경 시 데이터 새로고침
   useEffect(() => {
@@ -209,31 +210,35 @@ export default function HomePage() {
 
   // 즐겨찾기 토글 (Supabase 연동)
   const handleFavoriteToggle = async (recipeId: string, currentFavorite: boolean) => {
-    console.log('[handleFavoriteToggle 호출]', { recipeId, currentFavorite }); // 클릭 시 호출 여부 확인
+    if (isFavoriteToggling.has(recipeId)) return;
+
+    setIsFavoriteToggling(prev => new Set(prev).add(recipeId));
+    
+    // 로컬 상태만 즉시 업데이트하여 UX 개선
+    setFavorites(prev => {
+      const newFavorites = new Set(prev);
+      if (!currentFavorite) {
+        newFavorites.add(recipeId);
+      } else {
+        newFavorites.delete(recipeId);
+      }
+      return newFavorites;
+    });
+    
+    // 레시피북 탭에서도 즉시 업데이트 (무한 스크롤 상태 고려)
+    if (activeTab === 'recipebook') {
+      setRecipebookRecipes(prev => 
+        prev.map(recipe => 
+          recipe.id === recipeId 
+            ? { ...recipe, isfavorite: !currentFavorite }
+            : recipe
+        )
+      );
+    }
+
     try {
       await recipeService.toggleFavorite(recipeId, !currentFavorite);
-      // 실시간 구독으로 자동 업데이트되므로 별도 새로고침 불필요
-      // 로컬 상태만 즉시 업데이트하여 UX 개선
-      setFavorites(prev => {
-        const newFavorites = new Set(prev);
-        if (!currentFavorite) {
-          newFavorites.add(recipeId);
-        } else {
-          newFavorites.delete(recipeId);
-        }
-        return newFavorites;
-      });
-      
-      // 레시피북 탭에서도 즉시 업데이트 (무한 스크롤 상태 고려)
-      if (activeTab === 'recipebook') {
-        setRecipebookRecipes(prev => 
-          prev.map(recipe => 
-            recipe.id === recipeId 
-              ? { ...recipe, isfavorite: !currentFavorite }
-              : recipe
-          )
-        );
-      }
+      // DB 업데이트 성공
     } catch (error) {
       console.error('즐겨찾기 토글 실패:', error);
       // 실패 시 원래 상태로 복원
@@ -246,6 +251,23 @@ export default function HomePage() {
         }
         return newFavorites;
       });
+       if (activeTab === 'recipebook') {
+        setRecipebookRecipes(prev => 
+          prev.map(recipe => 
+            recipe.id === recipeId 
+              ? { ...recipe, isfavorite: currentFavorite }
+              : recipe
+          )
+        );
+      }
+    } finally {
+      setTimeout(() => {
+        setIsFavoriteToggling(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(recipeId);
+          return newSet;
+        });
+      }, 1000);
     }
   };
 
@@ -443,78 +465,94 @@ export default function HomePage() {
   };
 
   return (
-    <main className="relative min-h-screen bg-black pb-24 max-w-md mx-auto w-full"> {/* 너비 제한 추가 */}
-      {/* 전체 탭 공통 반투명 배경 이미지 */}
-      <BackgroundImage />
-      {/* 실제 내용 */}
+    <main className="relative min-h-screen px-4 pb-24 max-w-md mx-auto w-full">
       <YoristHeader />
       {/* FAB(플로팅 액션 버튼) - 홈 탭에서만 표시 */}
       {activeTab === 'home' && (
-        <>
-          {/* FAB 메뉴 버튼들 - pointer-events를 조건부로 적용 */}
+        <div className="pointer-events-none">
+          {/* FAB 메뉴 버튼들 - 세련된 애니메이션과 함께 */}
           <div
-            className={`fixed z-50 flex flex-col items-end transition-all duration-300 ${showFabMenu ? 'pointer-events-auto' : 'pointer-events-none'}`}
+            className={`fixed z-50 flex flex-col items-end transition-all duration-500 ease-out pointer-events-auto ${
+              showFabMenu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+            }`}
             style={{
               right: 24,
-              bottom: 160,
-              minWidth: 160,
+              bottom: 180,
             }}
           >
-            {/* 레시피 추가 버튼 - 플러스 버튼 위에 충분한 간격 */}
+            {/* 레시피 추가 버튼 */}
             <button
-              className={`w-40 flex items-center gap-2 px-6 py-3 rounded-xl shadow-lg font-bold text-base bg-gradient-to-r from-orange-400 to-orange-500 text-white hover:from-orange-500 hover:to-orange-600 transition-all duration-200 ${showFabMenu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
-              style={{ minWidth: 160, marginBottom: '12px' }}
+              className={`group w-44 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl font-semibold text-sm text-white hover:shadow-3xl transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 fab-menu-button fab-menu-dark ${
+                showFabMenu ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
+              }`}
+              style={{ 
+                transitionDelay: showFabMenu ? '0ms' : '150ms'
+              }}
               onClick={() => { setShowManualForm(true); setShowFabMenu(false); }}
-              tabIndex={showFabMenu ? 0 : -1}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-              레시피 추가
+              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300">
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </div>
+              <span className="font-bold">레시피 추가</span>
             </button>
-            {/* 재료 추가 버튼 - 플러스 버튼 위에 충분한 간격 */}
+            
+            {/* 재료 추가 버튼 */}
             <button
-              className={`w-40 flex items-center gap-2 px-6 py-3 rounded-xl shadow-lg font-bold text-base bg-gradient-to-r from-orange-400 to-orange-500 text-white hover:from-orange-500 hover:to-orange-600 transition-all duration-200 ${showFabMenu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
-              style={{ minWidth: 160, marginBottom: '12px' }}
+              className={`group w-44 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl font-semibold text-sm text-white hover:shadow-3xl transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 mt-4 fab-menu-button fab-menu-dark ${
+                showFabMenu ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
+              }`}
+              style={{ 
+                transitionDelay: showFabMenu ? '50ms' : '100ms'
+              }}
               onClick={() => { setShowAddIngredient(true); setShowFabMenu(false); }}
-              tabIndex={showFabMenu ? 0 : -1}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-              재료 추가
+              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-green-400 to-green-500 flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300">
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+              <span className="font-bold">재료 추가</span>
             </button>
           </div>
           
-          {/* 플러스(+) 버튼 - 항상 클릭 가능하도록 별도 컨테이너로 분리 */}
+          {/* 메인 플러스 버튼 - 세련된 디자인 */}
           <div
-            className="fixed z-50"
+            className="fixed z-50 pointer-events-auto"
             style={{
               right: 24,
               bottom: 96,
             }}
           >
             <button
-              className="w-14 h-14 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-xl flex items-center justify-center text-3xl font-bold hover:from-orange-500 hover:to-orange-600 transition-all duration-200 focus:outline-none"
+              className={`w-14 h-14 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-2xl flex items-center justify-center transition-all duration-300 transform hover:scale-110 hover:shadow-3xl focus:outline-none focus:ring-4 focus:ring-orange-400/30 fab-button ${
+                showFabMenu ? 'rotate-45 shadow-orange-500/50' : 'shadow-orange-400/30'
+              }`}
               style={{
-                boxShadow: '0 4px 24px 0 rgba(0,0,0,0.18)',
+                boxShadow: showFabMenu 
+                  ? '0 12px 40px rgba(255, 107, 53, 0.4), 0 6px 20px rgba(0, 0, 0, 0.2)' 
+                  : '0 8px 32px rgba(255, 107, 53, 0.3), 0 4px 16px rgba(0, 0, 0, 0.15)',
+                backdropFilter: 'blur(10px)',
               }}
               aria-label="추가 메뉴 열기"
               onClick={() => setShowFabMenu(v => !v)}
             >
-              <span className="flex items-center justify-center w-full h-full">
-                <svg
-                  className={`w-7 h-7 transition-transform duration-200 ${showFabMenu ? 'rotate-45' : ''}`}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={3}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </span>
+              <svg
+                className="w-7 h-7 transition-all duration-300"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
             </button>
           </div>
-        </>
+        </div>
       )}
       {/* 재료 추가 폼 모달 */}
       {showAddIngredient && (
@@ -544,9 +582,11 @@ export default function HomePage() {
         <>
           <div className="flex flex-col items-center mt-8 mb-6">
             <div className="text-lg sm:text-xl font-bold text-white text-center mb-2 drop-shadow">요리 영상 링크를 입력해보세요</div>
-            <svg className="w-8 h-8 text-orange-400 mb-2 animate-bounce" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
+            <div className="w-8 h-8 text-orange-400 mb-2 animate-bounce flex items-center justify-center">
+              <svg className="w-full h-full" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" style={{ willChange: 'transform' }}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
           {/* 유튜브 링크 입력 카드형 컨테이너 */}
           <div className="w-full mx-auto bg-[#181818] rounded-2xl shadow-lg p-6 mb-6 flex flex-col items-center"> {/* 중복된 너비 제한 제거 */}
@@ -649,10 +689,10 @@ export default function HomePage() {
           {/* ManualRecipeForm은 모달로 대체되므로 여기서는 표시하지 않음 */}
           {/* 레시피북 섹션 */}
           <RecipeSection
-            title="나의 요리스트"
+           
             recipes={recipebookRecipes}
             totalCount={totalRecipeCount}
-            onRecipeClick={recipe => router.push(`/recipe/${recipe.id}`)}
+            onRecipeClick={recipe => router.push(`/recipe/${recipe.id}?from=recipebook`)}
             onFavoriteToggle={(id, isfavorite) => handleFavoriteToggle(id, isfavorite)}
             favorites={favorites}
           />
@@ -666,7 +706,7 @@ export default function HomePage() {
       {activeTab === 'search' && (
         <div className="animate-fadeIn pb-24"> {/* 중복된 너비 제한 제거 */}
           <SearchPage
-            onRecipeClick={recipe => router.push(`/recipe/${recipe.id}`)}
+            onRecipeClick={recipe => router.push(`/recipe/${recipe.id}?from=search`)}
             onFavoriteToggle={handleFavoriteToggle}
             favorites={favorites}
           />
@@ -677,7 +717,7 @@ export default function HomePage() {
       {activeTab === 'favorites' && (
         <div className="animate-fadeIn pb-24"> {/* 중복된 너비 제한 제거 */}
           <FavoritesPage
-            onRecipeClick={recipe => router.push(`/recipe/${recipe.id}`)}
+            onRecipeClick={recipe => router.push(`/recipe/${recipe.id}?from=favorites`)}
             onFavoriteToggle={handleFavoriteToggle}
             favorites={favorites}
           />

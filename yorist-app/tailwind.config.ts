@@ -46,6 +46,13 @@ const config: Config = {
         'md': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
         'lg': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
         'xl': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+        '2xl': '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        '3xl': '0 35px 60px -15px rgba(0, 0, 0, 0.3)',
+        'inner': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)',
+        'orange': '0 8px 32px rgba(255, 107, 53, 0.3), 0 4px 16px rgba(0, 0, 0, 0.15)',
+        'orange-lg': '0 12px 40px rgba(255, 107, 53, 0.4), 0 6px 20px rgba(0, 0, 0, 0.2)',
+        'dark': '0 8px 32px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.2)',
+        'dark-lg': '0 12px 40px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.25)',
       },
       // 개선된 둥근 모서리
       borderRadius: {
@@ -66,6 +73,7 @@ const config: Config = {
         'slideIn': 'slideIn 0.3s ease-out',
         'scaleIn': 'scaleIn 0.2s ease-out',
         'pulse': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'bounce': 'bounce 1s infinite',
       },
       keyframes: {
         fadeIn: {
@@ -79,6 +87,20 @@ const config: Config = {
         scaleIn: {
           '0%': { opacity: '0', transform: 'scale(0.95)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        bounce: {
+          '0%, 20%, 53%, 80%, 100%': {
+            transform: 'translate3d(0,0,0)',
+          },
+          '40%, 43%': {
+            transform: 'translate3d(0, -30px, 0)',
+          },
+          '70%': {
+            transform: 'translate3d(0, -15px, 0)',
+          },
+          '90%': {
+            transform: 'translate3d(0, -4px, 0)',
+          },
         },
       },
       // 개선된 간격

@@ -250,11 +250,6 @@ export const subscribeToRecipeChanges = (
   recipeId: string, 
   onUpdate: (payload: any) => void
 ) => {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-
   const subscription = supabase
     .channel(`recipe-${recipeId}`)
     .on(
@@ -284,11 +279,6 @@ export const subscribeToIngredientChanges = (
   ingredientId: string, 
   onUpdate: (payload: any) => void
 ) => {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-
   const subscription = supabase
     .channel(`ingredient-${ingredientId}`)
     .on(
@@ -316,11 +306,6 @@ export const subscribeToIngredientChanges = (
 export const subscribeToAllIngredientChanges = (
   onUpdate: (payload: any) => void
 ) => {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-
   const subscription = supabase
     .channel('ingredients-master')
     .on(
@@ -347,11 +332,6 @@ export const subscribeToAllIngredientChanges = (
 export const subscribeToAllRecipeChanges = (
   onUpdate: (payload: any) => void
 ) => {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-
   const subscription = supabase
     .channel('recipes')
     .on(
@@ -376,11 +356,6 @@ export const subscribeToAllRecipeChanges = (
  * @returns 업데이트된 레시피 데이터
  */
 export const updateRecipeWithLatestIngredients = async (recipe: any) => {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-
   try {
     const ingredientIds = recipe.ingredients
       .map((ing: any) => ing.ingredient_id)

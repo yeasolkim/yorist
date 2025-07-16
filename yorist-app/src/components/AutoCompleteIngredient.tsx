@@ -1,13 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { RecipeIngredient } from '@/lib/types';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 interface AutoCompleteIngredientProps {
   value: RecipeIngredient;
@@ -15,6 +10,7 @@ interface AutoCompleteIngredientProps {
   placeholder?: string;
   className?: string;
   showFavoritesOnly?: boolean; // 즐겨찾기 재료만 표시할지 여부
+  isEditMode?: boolean; // 수정 모드인지 여부 (기본값: false)
 }
 
 interface IngredientSuggestion {
@@ -30,7 +26,8 @@ export default function AutoCompleteIngredient({
   onChange, 
   placeholder = "재료명을 입력하세요",
   className = "",
-  showFavoritesOnly = false
+  showFavoritesOnly = false,
+  isEditMode = false
 }: AutoCompleteIngredientProps) {
   const [suggestions, setSuggestions] = useState<IngredientSuggestion[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -38,6 +35,8 @@ export default function AutoCompleteIngredient({
   const [searchTerm, setSearchTerm] = useState(value.name);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSearchTermRef = useRef<string>('');
 
   // 외부 클릭 시 드롭다운 닫기
   useEffect(() => {
@@ -51,6 +50,15 @@ export default function AutoCompleteIngredient({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // 컴포넌트 언마운트 시 정리
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // 재료명 검색 및 자동완성
   useEffect(() => {
     const searchIngredients = async () => {
@@ -60,7 +68,19 @@ export default function AutoCompleteIngredient({
         return;
       }
 
+      // 이미 로딩 중이면 중복 요청 방지
+      if (isLoading) {
+        return;
+      }
+
+      // 이전 검색어와 동일하면 중복 요청 방지
+      if (lastSearchTermRef.current === searchTerm) {
+        return;
+      }
+
       setIsLoading(true);
+      lastSearchTermRef.current = searchTerm;
+      
       try {
         let query = supabase
           .from('ingredients_master')
@@ -101,10 +121,20 @@ export default function AutoCompleteIngredient({
       }
     };
 
-    // 디바운싱 (300ms 지연)
-    const timeoutId = setTimeout(searchIngredients, 300);
-    return () => clearTimeout(timeoutId);
-  }, [searchTerm]);
+    // 이전 타임아웃 정리
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // 디바운싱 (500ms 지연)
+    searchTimeoutRef.current = setTimeout(searchIngredients, 500);
+    
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchTerm, showFavoritesOnly, isLoading]);
 
   // 재료 선택 핸들러
   const handleSuggestionClick = (suggestion: IngredientSuggestion) => {
@@ -127,12 +157,13 @@ export default function AutoCompleteIngredient({
     const newName = e.target.value;
     setSearchTerm(newName);
     
-    // 입력값이 변경되면 ingredient_id를 초기화 (새 재료로 간주)
+    // 입력값이 변경되면 ingredient_id를 초기화 (새 재료로 간지)
     if (newName !== value.name) {
       const updatedIngredient: RecipeIngredient = {
         ...value,
         name: newName,
-        ingredient_id: '' // 새 재료로 간주하여 ingredient_id 초기화
+        // 수정 모드가 아닐 때만 ingredient_id 초기화
+        ingredient_id: isEditMode ? value.ingredient_id : ''
       };
       onChange(updatedIngredient);
     }
@@ -164,7 +195,8 @@ export default function AutoCompleteIngredient({
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         onFocus={() => {
-          if (suggestions.length > 0) {
+          // 포커스 시에만 드롭다운 표시 (검색어가 있을 때)
+          if (searchTerm.length >= 2 && suggestions.length > 0) {
             setShowDropdown(true);
           }
         }}
@@ -173,7 +205,7 @@ export default function AutoCompleteIngredient({
       />
 
       {/* 자동완성 드롭다운 */}
-      {showDropdown && (
+      {showDropdown && searchTerm.length >= 2 && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-[#181818] border border-[#333] rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto">
           {isLoading ? (
             <div className="px-4 py-3 text-gray-400 text-center">
@@ -205,11 +237,11 @@ export default function AutoCompleteIngredient({
                 </button>
               ))}
             </div>
-          ) : searchTerm.length >= 2 ? (
+          ) : (
             <div className="px-4 py-3 text-gray-400 text-center">
               일치하는 재료가 없습니다
             </div>
-          ) : null}
+          )}
         </div>
       )}
     </div>

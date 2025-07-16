@@ -51,12 +51,13 @@ export default function BottomNavigation({
   ];
 
   const handleTabClick = (tab: NavigationTab) => {
-    onTabChange(tab);
+    // 중복 클릭 방지를 위한 짧은 지연
+    setTimeout(() => onTabChange(tab), 0);
   };
   
   return (
     // 하단 네비게이션 바 배경을 불투명하게 변경
-    <nav className="fixed bottom-0 left-0 w-full z-50 bg-[#1a1a1a]/95 backdrop-blur-xl border-t border-[#2a2a2a] px-2 sm:px-4 pb-2 sm:pb-4 pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed bottom-0 left-0 w-full z-[9999] bg-[#1a1a1a]/95 backdrop-blur-xl border-t border-[#2a2a2a] px-2 sm:px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
       <div className="flex justify-around items-center h-12 sm:h-16 max-w-md mx-auto">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -64,8 +65,12 @@ export default function BottomNavigation({
           return (
             <button
               key={tab.id}
-              onClick={() => handleTabClick(tab.id)}
-              className={`flex flex-col items-center justify-center flex-1 h-full transition-all duration-300 ease-out relative group min-h-[36px] sm:min-h-[44px] ${
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleTabClick(tab.id);
+              }}
+              className={`flex flex-col items-center justify-center flex-1 h-full transition-all duration-300 ease-out relative group min-h-[44px] touch-manipulation ${
                 isActive 
                   ? 'text-orange-400' 
                   : 'text-gray-400 hover:text-gray-300'

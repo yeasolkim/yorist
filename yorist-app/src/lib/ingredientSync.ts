@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './supabase';
 import { RecipeIngredient, IngredientMaster } from './types';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 let version = 0;
 const listeners: (() => void)[] = [];

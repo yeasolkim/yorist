@@ -4,7 +4,7 @@ import { getYoutubeThumbnailUrl, getYouTubeVideoId, getYouTubeThumbnail } from '
 
 interface RecipeCardProps {
   recipe: Recipe;
-  onClick?: () => void;
+  onRecipeClick?: () => void;
   showFavorite?: boolean;
   onFavoriteToggle?: (recipeId: string, currentFavorite: boolean) => void; // 시그니처 수정
   favorites?: Set<string>;
@@ -12,7 +12,7 @@ interface RecipeCardProps {
 
 export default function RecipeCard({ 
   recipe, 
-  onClick, 
+  onRecipeClick, 
   showFavorite = false, 
   onFavoriteToggle,
   favorites
@@ -29,8 +29,8 @@ export default function RecipeCard({
 
   return (
     <div 
-      className="card bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl sm:rounded-2xl p-2 sm:p-3 cursor-pointer hover:border-[#3a3a3a] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 ease-out animate-fadeIn active:scale-95" 
-      onClick={onClick}
+      className="card relative z-10 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl sm:rounded-2xl p-2 sm:p-3 cursor-pointer hover:border-[#3a3a3a] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 ease-out animate-fadeIn active:scale-95" 
+      onClick={onRecipeClick}
     >
       <div className="flex items-start justify-between mb-2">
         {/* 썸네일 */}

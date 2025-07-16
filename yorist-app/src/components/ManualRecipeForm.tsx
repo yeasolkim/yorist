@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Recipe, RecipeIngredient, RecipeStep } from '@/lib/types';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { 
   triggerIngredientSync, 
   findIngredientByName, 
@@ -21,7 +21,7 @@ interface ManualRecipeFormProps {
   initialRecipe?: Partial<Recipe>;
 }
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
 
 export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: ManualRecipeFormProps) {
   const [title, setTitle] = useState(initialRecipe?.title || '');
@@ -176,6 +176,14 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
   const handleSaveEditIngredient = async (idx: number) => {
     try {
       const originalIngredient = ingredients[idx];
+      console.log('[재료 수정] 원본 재료:', originalIngredient);
+      console.log('[재료 수정] 수정된 값:', {
+        name: editIngredientName,
+        amount: editIngredientAmount,
+        unit: editIngredientUnit,
+        shop_url: editIngredientShopUrl
+      });
+      
       const updatedIngredient = {
         ...originalIngredient,
         name: editIngredientName,
@@ -183,6 +191,8 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
         unit: editIngredientUnit,
         shop_url: editIngredientShopUrl
       };
+      
+      console.log('[재료 수정] 최종 업데이트된 재료:', updatedIngredient);
       
       // ingredients_master 테이블 업데이트
       if (originalIngredient.ingredient_id) {
@@ -193,9 +203,13 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
         });
       }
       
-      setIngredients(prev => prev.map((ing, i) =>
-        i === idx ? updatedIngredient : ing
-      ));
+      setIngredients(prev => {
+        const newIngredients = prev.map((ing, i) =>
+          i === idx ? updatedIngredient : ing
+        );
+        console.log('[재료 수정] 업데이트된 재료 목록:', newIngredients);
+        return newIngredients;
+      });
       setEditingIngredientIdx(null);
       setEditIngredientName(''); setEditIngredientAmount(''); setEditIngredientUnit(''); setEditIngredientShopUrl('');
     } catch (error) {
@@ -300,6 +314,8 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
               <label className="block text-white font-medium mb-2">레시피 제목 *</label>
               <input
                 type="text"
+                id="recipe-title"
+                name="recipe-title"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="예: 김치찌개"
@@ -312,6 +328,8 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
               <label className="block text-white font-medium mb-2">유튜브 링크</label>
               <input
                 type="text"
+                id="recipe-videourl"
+                name="recipe-videourl"
                 value={videourl}
                 onChange={e => setVideourl(e.target.value)}
                 placeholder="https://youtube.com/..."
@@ -321,6 +339,8 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
             <div>
               <label className="block text-white font-medium mb-2">설명</label>
               <textarea
+                id="recipe-description"
+                name="recipe-description"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="레시피에 대한 간단한 설명을 입력하세요"
@@ -337,7 +357,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
               {/* 재료 리스트 - 한 줄 요약형, 최소 여백, 작은 아이콘 */}
               {ingredients.map((ingredient, index) => (
                 <div
-                  key={ingredient.ingredient_id || ingredient.name || index}
+                  key={`ingredient-${index}-${ingredient.ingredient_id || ingredient.name}`}
                   className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#232323] rounded-lg px-3 py-2 mb-1 gap-2 text-sm sm:text-base"
                   style={{ minHeight: '40px' }}
                 >
@@ -346,6 +366,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
                     <div className="w-full flex flex-col gap-2">
                       {/* 자동완성 재료명 입력 */}
                       <AutoCompleteIngredient
+                        key={`edit-ingredient-${index}`}
                         value={{
                           ingredient_id: ingredient.ingredient_id || '',
                           name: editIngredientName,
@@ -361,26 +382,33 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
                         }}
                         placeholder="재료명을 입력하세요"
                         className="w-full"
+                        isEditMode={true}
                       />
                       
                       {/* 수량 및 단위 입력 */}
                       <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={editIngredientAmount}
-                          onChange={e => setEditIngredientAmount(e.target.value)}
-                          placeholder="수량"
-                          className="w-20 bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
-                        />
-                        <input
-                          type="text"
-                          value={editIngredientUnit}
-                          onChange={e => setEditIngredientUnit(e.target.value)}
-                          placeholder="단위"
-                          className="w-24 bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
-                        />
+                                            <input
+                      type="text"
+                      id={`edit-ingredient-amount-${index}`}
+                      name={`edit-ingredient-amount-${index}`}
+                      value={editIngredientAmount}
+                      onChange={e => setEditIngredientAmount(e.target.value)}
+                      placeholder="수량"
+                      className="w-20 bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
+                    />
+                                            <input
+                      type="text"
+                      id={`edit-ingredient-unit-${index}`}
+                      name={`edit-ingredient-unit-${index}`}
+                      value={editIngredientUnit}
+                      onChange={e => setEditIngredientUnit(e.target.value)}
+                      placeholder="단위"
+                      className="w-24 bg-[#2a2a2a] border border-[#3a3a3a] text-white rounded-lg px-2 py-1 text-sm"
+                    />
                       <input
                         type="text"
+                        id={`edit-ingredient-shop-url-${index}`}
+                        name={`edit-ingredient-shop-url-${index}`}
                         value={editIngredientShopUrl}
                         onChange={e => setEditIngredientShopUrl(e.target.value)}
                         placeholder="구매링크"
@@ -430,59 +458,71 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
                   )}
                 </div>
               ))}
-              {/* 재료 추가 입력란 - 자동완성 컴포넌트 사용 */}
-              <div className="space-y-3 mt-2">
-                {/* 자동완성 재료명 입력 */}
-                <AutoCompleteIngredient
-                  value={{
-                    ingredient_id: '',
-                    name: ingredientName,
-                    amount: ingredientAmount,
-                    unit: ingredientUnit,
-                    shop_url: ingredientShopUrl
-                  }}
-                  onChange={(ingredient) => {
-                    setIngredientName(ingredient.name);
-                    setIngredientAmount(ingredient.amount);
-                    setIngredientUnit(ingredient.unit);
-                    setIngredientShopUrl(ingredient.shop_url || '');
-                  }}
-                  placeholder="재료명을 입력하세요"
-                  className="w-full"
-                />
-                
-                {/* 수량 및 단위 입력 */}
-                <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={ingredientAmount}
-                  onChange={e => setIngredientAmount(e.target.value)}
-                  placeholder="수량"
-                  className="w-20 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
-                />
-                <input
-                  type="text"
-                  value={ingredientUnit}
-                  onChange={e => setIngredientUnit(e.target.value)}
-                  placeholder="단위 (개, g, ml 등)"
-                  className="w-24 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
-                />
-                <input
-                  type="text"
-                  value={ingredientShopUrl}
-                  onChange={e => setIngredientShopUrl(e.target.value)}
-                  placeholder="구매링크 (선택)"
-                    className="flex-1 min-w-0 max-w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
-                />
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleAddIngredient}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2 font-medium transition-colors mt-2"
-              >
-                재료 추가
-              </button>
+              {/* 재료 추가 입력란 - 수정 모드가 아닐 때만 표시 */}
+              {editingIngredientIdx === null && (
+                <>
+                  <div className="space-y-3 mt-2">
+                    {/* 자동완성 재료명 입력 */}
+                    <AutoCompleteIngredient
+                      key="add-ingredient-new"
+                      value={{
+                        ingredient_id: '',
+                        name: ingredientName,
+                        amount: ingredientAmount,
+                        unit: ingredientUnit,
+                        shop_url: ingredientShopUrl
+                      }}
+                      onChange={(ingredient) => {
+                        setIngredientName(ingredient.name);
+                        setIngredientAmount(ingredient.amount);
+                        setIngredientUnit(ingredient.unit);
+                        setIngredientShopUrl(ingredient.shop_url || '');
+                      }}
+                      placeholder="재료명을 입력하세요"
+                      className="w-full"
+                      isEditMode={false}
+                    />
+                    
+                    {/* 수량 및 단위 입력 */}
+                    <div className="flex gap-2">
+                    <input
+                      type="text"
+                      id="new-ingredient-amount"
+                      name="new-ingredient-amount"
+                      value={ingredientAmount}
+                      onChange={e => setIngredientAmount(e.target.value)}
+                      placeholder="수량"
+                      className="w-20 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
+                    />
+                    <input
+                      type="text"
+                      id="new-ingredient-unit"
+                      name="new-ingredient-unit"
+                      value={ingredientUnit}
+                      onChange={e => setIngredientUnit(e.target.value)}
+                      placeholder="단위 (개, g, ml 등)"
+                      className="w-24 bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
+                    />
+                    <input
+                      type="text"
+                      id="new-ingredient-shop-url"
+                      name="new-ingredient-shop-url"
+                      value={ingredientShopUrl}
+                      onChange={e => setIngredientShopUrl(e.target.value)}
+                      placeholder="구매링크 (선택)"
+                        className="flex-1 min-w-0 max-w-full bg-[#2a2a2a] border border-[#3a3a3a] text-white placeholder:text-gray-500 rounded-lg px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all text-sm"
+                    />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddIngredient}
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2 font-medium transition-colors mt-2"
+                  >
+                    재료 추가
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -491,9 +531,11 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
             <label className="block text-white font-medium mb-2">조리 단계 *</label>
             <div className="space-y-2">
               {steps.map((step, idx) => (
-                <div key={idx} className="flex items-center gap-2 mb-2">
+                <div key={`step-${idx}-${step.description.substring(0, 20)}`} className="flex items-center gap-2 mb-2">
                   <input
                     type="text"
+                    id={`step-description-${idx}`}
+                    name={`step-description-${idx}`}
                     value={step.description}
                     onChange={e => handleStepChange(idx, e.target.value)}
                     placeholder={`조리 단계 ${idx + 1}`}
@@ -522,6 +564,8 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
               <div className="flex gap-2">
                 <input
                   type="text"
+                  id="new-step-description"
+                  name="new-step-description"
                   value={stepDescription}
                   onChange={e => setStepDescription(e.target.value)}
                   placeholder="조리 단계를 입력하세요"

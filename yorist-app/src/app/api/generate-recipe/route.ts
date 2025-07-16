@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 
 // 백엔드 API URL (환경변수로 설정 가능)
 const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://your-backend-url.railway.app';
 const BACKEND_API_URL1 = process.env.BACKEND_API_URL1 || 'https://your-backend-url1.railway.app';
-
-// Supabase 클라이언트 초기화
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 // 재료 매칭 함수: 기존 데이터베이스의 재료와 매칭하여 ingredient_id 설정
 async function matchIngredientsWithDatabase(ingredients: any[]): Promise<any[]> {

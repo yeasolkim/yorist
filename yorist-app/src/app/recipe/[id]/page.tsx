@@ -1,62 +1,140 @@
 "use client";
 import YoristHeader from '@/components/YoristHeader';
-import { useRouter, useParams } from 'next/navigation';
-import { useEffect, useState, useCallback } from 'react';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Recipe, RecipeStep, RecipeIngredient } from '@/lib/types';
 import ManualRecipeForm from '@/components/ManualRecipeForm';
 import { recipeService, toDbIngredients } from '@/lib/supabase';
 import Link from 'next/link';
 import { getYouTubeVideoId, getYouTubeThumbnail, isValidYouTubeUrl } from '@/lib/youtubeUtils';
 import BottomNavigation from '@/components/BottomNavigation';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { useRecipeSync, triggerRecipeSync } from '@/lib/recipeSync';
 import { useIngredientSync, triggerIngredientSync } from '@/lib/ingredientSync';
+
+// 안정적인 동기화를 위한 상태 관리 클래스
+class StableSyncManager {
+  private pendingUpdates = new Set<string>();
+  private lastUpdateTime = 0;
+  private readonly DEBOUNCE_DELAY = 2000; // 2초로 증가
+  private updateQueue: Array<{ type: string; timestamp: number }> = [];
+  private isProcessing = false;
+
+  // 업데이트가 진행 중인지 확인
+  isUpdating(type: string): boolean {
+    return this.pendingUpdates.has(type);
+  }
+
+  // 업데이트 시작
+  startUpdate(type: string): void {
+    this.pendingUpdates.add(type);
+    this.lastUpdateTime = Date.now();
+    this.updateQueue.push({ type, timestamp: Date.now() });
+    console.log(`[SyncManager] 업데이트 시작: ${type}`);
+  }
+
+  // 업데이트 완료
+  finishUpdate(type: string): void {
+    this.pendingUpdates.delete(type);
+    this.updateQueue = this.updateQueue.filter(update => update.type !== type);
+    console.log(`[SyncManager] 업데이트 완료: ${type}`);
+  }
+
+  // 모든 업데이트가 완료되었는지 확인
+  isAllUpdatesComplete(): boolean {
+    return this.pendingUpdates.size === 0;
+  }
+
+  // 마지막 업데이트로부터 충분한 시간이 지났는지 확인
+  canProcessExternalUpdate(): boolean {
+    const timeSinceLastUpdate = Date.now() - this.lastUpdateTime;
+    const hasStableState = this.pendingUpdates.size === 0;
+    const hasEnoughTime = timeSinceLastUpdate > this.DEBOUNCE_DELAY;
+    
+    console.log(`[SyncManager] 외부 업데이트 허용 여부:`, {
+      timeSinceLastUpdate,
+      hasStableState,
+      hasEnoughTime,
+      pendingUpdates: Array.from(this.pendingUpdates)
+    });
+    
+    return hasStableState && hasEnoughTime;
+  }
+
+  // 강제로 모든 업데이트 완료 처리
+  forceCompleteAll(): void {
+    this.pendingUpdates.clear();
+    this.updateQueue = [];
+    console.log('[SyncManager] 모든 업데이트 강제 완료');
+  }
+
+  // 업데이트 큐 상태 확인
+  getQueueStatus(): string {
+    return `Pending: ${this.pendingUpdates.size}, Queue: ${this.updateQueue.length}`;
+  }
+}
 
 export default function RecipeDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { id } = params;
+  const searchParams = useSearchParams();
+  const fromTab = searchParams.get('from') || 'home'; // 이전 탭 정보
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
   const [related, setRelated] = useState<Recipe[]>([]);
-  // 구매 링크 입력 상태 관리
-  const [editingIngredientId, setEditingIngredientId] = useState<string | null>(null);
-  const [shopUrlInput, setShopUrlInput] = useState('');
   const [editMode, setEditMode] = useState(false);
-  // 레시피 설명 토글 상태
-  const [showDescription, setShowDescription] = useState(false); // 기본 닫힘
-  // 중요 조리단계만 보기 체크박스 상태
+  const [showDescription, setShowDescription] = useState(false);
   const [showImportantOnly, setShowImportantOnly] = useState(false);
-  // 즐겨찾기 토글 중 상태 (깜빡임 방지용)
-  const [isFavoriteToggling, setIsFavoriteToggling] = useState(false);
-  // 재료 즐겨찾기 토글 중 상태 (깜빡임 방지용)
-  const [ingredientFavoriteTogglingIds, setIngredientFavoriteTogglingIds] = useState<Set<string>>(new Set());
+  const [isEditing, setIsEditing] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState(0); // 마지막 업데이트 시간
 
-  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  // 안정적인 동기화 매니저 인스턴스
+  const syncManager = useRef(new StableSyncManager());
+  
+  // 구독 채널 참조
+  const recipeSubscription = useRef<any>(null);
+  const ingredientSubscription = useRef<any>(null);
+
   const ingredientSyncVersion = useIngredientSync();
 
   // 레시피 데이터를 최신으로 fetch하는 함수
-  const fetchLatestRecipe = useCallback(async () => {
+  const fetchLatestRecipe = useCallback(async (force = false) => {
     if (!id) return;
+    
+    // 업데이트 중이면 스킵 (강제 새로고침이 아닌 경우)
+    if (!force && !syncManager.current.isAllUpdatesComplete()) {
+      console.log('[fetchLatestRecipe] 업데이트 진행 중이므로 fetch 스킵');
+      return;
+    }
+
+    // 강제 새로고침이 아닌 경우 추가 조건 확인
+    if (!force && !syncManager.current.canProcessExternalUpdate()) {
+      console.log('[fetchLatestRecipe] 외부 업데이트 조건 불충족으로 스킵');
+      return;
+    }
+
+    console.log('[fetchLatestRecipe] 레시피 데이터 fetch 시작');
     setLoading(true);
     try {
       const found = await recipeService.getRecipeById(id as string);
       if (found) {
         const latestRecipe = supabaseToRecipe(found);
+        console.log('[fetchLatestRecipe] 레시피 데이터 업데이트:', latestRecipe.title);
         setRecipe(latestRecipe);
-        
-        // 관련 레시피도 함께 업데이트
         await fetchRelatedRecipes(latestRecipe);
       } else {
+        console.log('[fetchLatestRecipe] 레시피를 찾을 수 없음');
         setRecipe(null);
         setRelated([]);
       }
     } catch (error) {
-      console.error('레시피 데이터 fetch 실패:', error);
+      console.error('[fetchLatestRecipe] 레시피 데이터 fetch 실패:', error);
       setRecipe(null);
       setRelated([]);
     } finally {
       setLoading(false);
+      console.log('[fetchLatestRecipe] 레시피 데이터 fetch 완료');
     }
   }, [id]);
 
@@ -69,7 +147,6 @@ export default function RecipeDetailPage() {
     }
     
     try {
-      // 모든 레시피 불러오기
       const { data, error } = await supabase.from('recipes').select('*');
       if (error) {
         console.error('관련 레시피 전체 조회 실패:', error);
@@ -77,13 +154,58 @@ export default function RecipeDetailPage() {
         return;
       }
       
+      // 모든 관련 레시피의 재료 ID 수집
+      const allRelatedIngredientIds = new Set<string>();
+      (data || []).forEach(r => {
+        if (r.id !== currentRecipe.id) {
+          (r.ingredients || []).forEach((ing: any) => {
+            if (ing.ingredient_id) {
+              allRelatedIngredientIds.add(ing.ingredient_id);
+            }
+          });
+        }
+      });
+      
+      // 재료 마스터에서 최신 정보 조회
+      const { data: ingredientMasterData, error: ingredientError } = await supabase
+        .from('ingredients_master')
+        .select('id, name, shop_url, is_favorite')
+        .in('id', Array.from(allRelatedIngredientIds));
+      
+      if (ingredientError) {
+        console.error('재료 마스터 정보 조회 실패:', ingredientError);
+      }
+      
+      // 재료 정보 매핑 생성
+      const ingredientMap = new Map();
+      (ingredientMasterData || []).forEach((ing: any) => {
+        ingredientMap.set(ing.id, ing);
+      });
+      
       const relatedRecipes = (data || [])
         .filter(r => r.id !== currentRecipe.id)
+        .map(r => {
+          // 재료 정보를 최신으로 업데이트
+          const updatedIngredients = (r.ingredients || []).map((ing: any) => {
+            const master = ingredientMap.get(ing.ingredient_id);
+            return {
+              ingredient_id: ing.ingredient_id || '',
+              name: master?.name || ing.name,
+              amount: ing.amount,
+              unit: ing.unit,
+              shop_url: master?.shop_url || ing.shop_url || '',
+              is_favorite: master?.is_favorite || ing.is_favorite || false,
+            };
+          });
+          
+          return {
+            ...r,
+            ingredients: updatedIngredients
+          };
+        })
         .map(r => supabaseToRecipe(r))
         .map(r => {
-          // 각 레시피의 ingredient_id 배열 추출
           const otherIds = r.ingredients.map(ing => ing.ingredient_id);
-          // 겹치는 재료 추출
           const commonIngredients = r.ingredients.filter(ing => ingredientIds.includes(ing.ingredient_id));
           return {
             ...r,
@@ -102,6 +224,35 @@ export default function RecipeDetailPage() {
     }
   }, [supabase]);
 
+  // 레시피의 재료 정보를 최신으로 업데이트하는 함수
+  const updateRecipeIngredients = useCallback(async () => {
+    if (!recipe || !syncManager.current.canProcessExternalUpdate()) return;
+    
+    try {
+      const ids = recipe.ingredients.map(ing => ing.ingredient_id).filter(Boolean);
+      if (ids.length === 0) return;
+      
+      const { data } = await supabase
+        .from('ingredients_master')
+        .select('id, name, shop_url, is_favorite')
+        .in('id', ids);
+      
+      const mergedIngredients = recipe.ingredients.map(ing => {
+        const master = data?.find((row: any) => row.id === ing.ingredient_id);
+        return { 
+          ...ing, 
+          name: master?.name || ing.name,
+          shop_url: master?.shop_url || ing.shop_url,
+          is_favorite: master?.is_favorite || ing.is_favorite
+        };
+      });
+      
+      setRecipe({ ...recipe, ingredients: mergedIngredients });
+    } catch (error) {
+      console.error('재료 정보 업데이트 실패:', error);
+    }
+  }, [recipe, supabase]);
+
   // 초기 데이터 로드
   useEffect(() => {
     fetchLatestRecipe();
@@ -111,131 +262,172 @@ export default function RecipeDetailPage() {
   useEffect(() => {
     if (!id) return;
 
-    // 레시피 테이블 변경 감지
-    const recipeSubscription = supabase
-      .channel(`recipe-${id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'recipes',
-          filter: `id=eq.${id}`
-        },
-        (payload) => {
-          console.log('레시피 데이터 변경 감지:', payload);
-          // 즐겨찾기 토글 중에는 실시간 업데이트 무시 (깜빡임 방지)
-          if (!isFavoriteToggling) {
-            fetchLatestRecipe();
-          }
-        }
-      )
-      .subscribe();
-
-    // 재료 마스터 테이블 변경 감지 (재료 정보 업데이트 시)
-    const ingredientSubscription = supabase
-      .channel(`ingredients-master`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'ingredients_master'
-        },
-        (payload) => {
-          console.log('재료 마스터 데이터 변경 감지:', payload);
-          // 재료 정보가 변경되면 레시피의 재료 정보도 업데이트
-          // 단, 재료 즐겨찾기 토글 중에는 무시 (깜빡임 방지)
-          if (recipe && !isFavoriteToggling && ingredientFavoriteTogglingIds.size === 0) {
-            updateRecipeIngredients();
-          }
-        }
-      )
-      .subscribe();
-
-    // 클린업 함수
-    return () => {
-      recipeSubscription.unsubscribe();
-      ingredientSubscription.unsubscribe();
-    };
-  }, [id, recipe, fetchLatestRecipe, isFavoriteToggling, ingredientFavoriteTogglingIds]);
-
-  // 레시피의 재료 정보를 최신으로 업데이트하는 함수
-  const updateRecipeIngredients = useCallback(async () => {
-    if (!recipe || isFavoriteToggling || ingredientFavoriteTogglingIds.size > 0) return;
-    
-    try {
-      const ids = recipe.ingredients.map(ing => ing.ingredient_id).filter(Boolean);
-      if (ids.length === 0) return;
-      
-      const { data } = await supabase
-        .from('ingredients_master')
-        .select('id, name, shop_url')
-        .in('id', ids);
-      
-      // 최신 재료 정보로 merge
-      const mergedIngredients = recipe.ingredients.map(ing => {
-        const master = data?.find((row: any) => row.id === ing.ingredient_id);
-        return { 
-          ...ing, 
-          name: master?.name || ing.name, // 재료명도 최신으로 업데이트
-          shop_url: master?.shop_url || ing.shop_url 
-        };
-      });
-      
-      setRecipe({ ...recipe, ingredients: mergedIngredients });
-    } catch (error) {
-      console.error('재료 정보 업데이트 실패:', error);
+    // 기존 구독 정리
+    if (recipeSubscription.current) {
+      recipeSubscription.current.unsubscribe();
     }
-  }, [recipe, supabase, isFavoriteToggling, ingredientFavoriteTogglingIds]);
+    if (ingredientSubscription.current) {
+      ingredientSubscription.current.unsubscribe();
+    }
+
+    // WebSocket 연결 재시도 로직
+    const setupSubscriptions = async () => {
+      try {
+        // 레시피 구독
+        recipeSubscription.current = supabase
+          .channel(`recipe-${id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'recipes',
+              filter: `id=eq.${id}`
+            },
+            (payload) => {
+              console.log('레시피 데이터 변경 감지:', payload);
+              
+              // 업데이트 중이면 스킵하여 깜빡임 방지
+              if (syncManager.current.isUpdating('edit')) {
+                console.log('수정 진행 중이므로 실시간 업데이트 스킵');
+                return;
+              }
+              
+              // 중복 호출 방지 (2초 내 중복 호출 스킵)
+              const now = Date.now();
+              if (now - lastUpdateTime < 2000) {
+                console.log('중복 호출 방지 (2초 내)');
+                return;
+              }
+              setLastUpdateTime(now);
+              
+              // 더 긴 디바운스 적용하여 과도한 업데이트 방지
+              setTimeout(() => {
+                if (!syncManager.current.isUpdating('edit') && syncManager.current.canProcessExternalUpdate()) {
+                  console.log('실시간 업데이트 실행');
+                  fetchLatestRecipe(true);
+                } else {
+                  console.log('실시간 업데이트 스킵 - 조건 불충족');
+                }
+              }, 1000);
+            }
+          )
+          .subscribe((status) => {
+            console.log('레시피 구독 상태:', status);
+            if (status === 'CHANNEL_ERROR') {
+              console.log('레시피 구독 오류, 재시도 중...');
+              setTimeout(setupSubscriptions, 3000);
+            }
+          });
+
+        // 재료 마스터 구독
+        ingredientSubscription.current = supabase
+          .channel(`ingredients-master`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'ingredients_master'
+            },
+            (payload) => {
+              console.log('재료 마스터 데이터 변경 감지:', payload);
+              
+              // 업데이트 중이거나 디바운스 시간이 지나지 않았으면 스킵
+              if (!syncManager.current.canProcessExternalUpdate()) {
+                console.log('업데이트 진행 중이므로 재료 변경 무시');
+                return;
+              }
+
+              // 더 긴 디바운스로 재료 정보 업데이트
+              setTimeout(() => {
+                if (recipe && syncManager.current.canProcessExternalUpdate()) {
+                  console.log('재료 정보 업데이트 실행');
+                  updateRecipeIngredients();
+                  
+                  // 관련 레시피도 함께 업데이트 (재료 변경 시 항상 업데이트)
+                  console.log('관련 레시피 정보 업데이트 실행');
+                  fetchRelatedRecipes(recipe);
+                } else {
+                  console.log('재료 정보 업데이트 스킵 - 조건 불충족');
+                }
+              }, 500);
+            }
+          )
+          .subscribe((status) => {
+            console.log('재료 구독 상태:', status);
+            if (status === 'CHANNEL_ERROR') {
+              console.log('재료 구독 오류, 재시도 중...');
+              setTimeout(setupSubscriptions, 3000);
+            }
+          });
+
+      } catch (error) {
+        console.error('구독 설정 실패:', error);
+        // 3초 후 재시도
+        setTimeout(setupSubscriptions, 3000);
+      }
+    };
+
+    setupSubscriptions();
+
+    return () => {
+      if (recipeSubscription.current) {
+        recipeSubscription.current.unsubscribe();
+      }
+      if (ingredientSubscription.current) {
+        ingredientSubscription.current.unsubscribe();
+      }
+    };
+  }, [id, recipe, fetchLatestRecipe, updateRecipeIngredients, fetchRelatedRecipes]);
 
   // 재료 동기화 버전 변경 시 재료 정보 업데이트
   useEffect(() => {
-    if (recipe && !isFavoriteToggling && ingredientFavoriteTogglingIds.size === 0) {
+    if (recipe && syncManager.current.canProcessExternalUpdate()) {
+      console.log('[재료 동기화] 버전 변경으로 재료 정보 업데이트');
       updateRecipeIngredients();
+    } else {
+      console.log('[재료 동기화] 업데이트 조건 불충족으로 스킵');
     }
-  }, [ingredientSyncVersion, updateRecipeIngredients, isFavoriteToggling, ingredientFavoriteTogglingIds]);
+  }, [ingredientSyncVersion, recipe, updateRecipeIngredients]);
 
-  // 구매 링크 저장 핸들러 (Supabase 연동은 추후 확장)
-  const handleSaveShopUrl = async (ingredientId: string) => {
-    if (!recipe) return;
-    if (!ingredientId) return; // id 유효성 체크
-    await supabase
-      .from('ingredients_master')
-      .update({ shop_url: shopUrlInput })
-      .eq('id', ingredientId);
-    triggerIngredientSync(); // 동기화 트리거
-    // 최신 정보 refetch
-    const { data } = await supabase
-      .from('ingredients_master')
-      .select('shop_url')
-      .eq('id', ingredientId)
-      .single();
-    // 로컬 상태 갱신
-    const updatedIngredients = recipe.ingredients.map(ing =>
-                ing.ingredient_id === ingredientId ? { ...ing, shop_url: data?.shop_url || '' } : ing
-    );
-    const updatedRecipe = { ...recipe, ingredients: updatedIngredients };
-    setRecipe(updatedRecipe);
-    setEditingIngredientId(null);
-    setShopUrlInput('');
-  };
-
-  // 레시피 삭제 (Supabase 연동)
+  // 레시피 삭제
   const handleDelete = async () => {
     if (!recipe) return;
     if (!window.confirm('정말 이 레시피를 삭제하시겠습니까?')) return;
-    await recipeService.deleteRecipe(recipe.id);
-    triggerRecipeSync(); // 동기화 트리거
-    router.push('/');
+    
+    syncManager.current.startUpdate('delete');
+    try {
+      await recipeService.deleteRecipe(recipe.id);
+      triggerRecipeSync();
+      
+      // 이전 탭 정보에 따라 적절한 페이지로 이동
+      if (fromTab === 'recipebook') {
+        router.push('/?tab=recipebook');
+      } else if (fromTab === 'search') {
+        router.push('/?tab=search');
+      } else if (fromTab === 'favorites') {
+        router.push('/?tab=favorites');
+      } else {
+        // 기본값은 홈 탭
+        router.push('/?tab=home');
+      }
+    } catch (error) {
+      console.error('레시피 삭제 실패:', error);
+      alert('레시피 삭제에 실패했습니다.');
+    } finally {
+      syncManager.current.finishUpdate('delete');
+    }
   };
 
-  // 레시피 수정 저장 (Supabase 연동)
+  // 레시피 수정 저장
   const handleEditSave = async (updated: Recipe) => {
     try {
-      // ingredients 변환
+      console.log('[레시피 수정] 시작:', updated.title);
+      setIsEditing(true);
+      syncManager.current.startUpdate('edit');
+      
       const dbIngredients = toDbIngredients(updated.ingredients);
-      // DB 컬럼명/타입에 맞게 변환
       const updateObj = {
         title: updated.title,
         description: updated.description,
@@ -244,95 +436,47 @@ export default function RecipeDetailPage() {
         videourl: updated.videourl || undefined,
         isfavorite: updated.isfavorite
       };
+      
+      console.log('[레시피 수정] DB 업데이트 객체:', updateObj);
+      
       const result = await recipeService.updateRecipe(updated.id, updateObj);
       if (result) {
-        setEditMode(false);
+        console.log('[레시피 수정] DB 업데이트 성공');
+        
+        // 성공 시 즉시 로컬 상태 업데이트 (깜빡임 방지)
         setRecipe(updated);
-        triggerRecipeSync(); // 동기화 트리거
+        setEditMode(false);
+        triggerRecipeSync();
+        
+        // 더 긴 지연 후 최신 데이터로 새로고침
+        setTimeout(() => {
+          if (syncManager.current.canProcessExternalUpdate()) {
+            console.log('[레시피 수정] 최신 데이터 새로고침 실행');
+            fetchLatestRecipe(true);
+          } else {
+            console.log('[레시피 수정] 최신 데이터 새로고침 스킵');
+          }
+        }, 2000);
+        
         alert('레시피가 성공적으로 수정되었습니다.');
       } else {
+        console.error('[레시피 수정] DB 업데이트 실패');
         alert('레시피 수정에 실패했습니다. 다시 시도해주세요.');
       }
     } catch (error) {
-      console.error('레시피 수정 중 오류:', error);
+      console.error('[레시피 수정] 오류:', error);
       alert('레시피 수정 중 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsEditing(false);
+      // 더 긴 지연 후 상태 해제하여 깜빡임 방지
+      setTimeout(() => {
+        syncManager.current.finishUpdate('edit');
+        console.log('[레시피 수정] 완료 - 동기화 상태 해제');
+      }, 3000);
     }
   };
 
-  // RecipeIngredient[] 변환 함수 (이미 올바른 형식이므로 단순히 반환)
-  function convertIngredientsToRecipeIngredients(ingredients: RecipeIngredient[]) {
-    return ingredients;
-  }
-
-  // 상세 페이지 내에서 재료 즐겨찾기 상태 관리
-  function RecipeDetailIngredients({ ingredients }: { ingredients: { ingredient_id: string; name: string; amount: string; unit: string; shopUrl: string }[] }) {
-    const [favoriteMap, setFavoriteMap] = useState<Record<string, boolean>>({});
-    const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
-    
-    useEffect(() => {
-      const ids = ingredients.map(ing => ing.ingredient_id).filter(Boolean);
-      if (ids.length === 0) return;
-      supabase
-        .from('ingredients_master')
-        .select('id, is_favorite')
-        .in('id', ids)
-        .then(({ data }) => {
-          const map: Record<string, boolean> = {};
-          data?.forEach((row: any) => { map[row.id] = row.is_favorite; });
-          setFavoriteMap(map);
-        });
-    }, [ingredients]);
-    
-    const toggleFavorite = async (ingredient_id: string) => {
-      if (!ingredient_id) return; // id 유효성 체크
-      if (togglingIds.has(ingredient_id)) return; // 중복 클릭 방지
-      
-      setTogglingIds(prev => new Set(prev).add(ingredient_id));
-      const newVal = !favoriteMap[ingredient_id];
-      try {
-        setFavoriteMap(map => ({ ...map, [ingredient_id]: newVal })); // 로컬 상태 즉시 업데이트
-        await supabase
-          .from('ingredients_master')
-          .update({ is_favorite: newVal ? 'true' : 'false' })
-          .eq('id', ingredient_id);
-      } catch (error) {
-        console.error('재료 즐겨찾기 토글 실패:', error);
-        // 실패 시 원래 상태로 복원
-        setFavoriteMap(map => ({ ...map, [ingredient_id]: !newVal }));
-      } finally {
-        // 토글 완료 후 잠시 대기 후 토글 중 상태 해제
-        setTimeout(() => {
-          setTogglingIds(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(ingredient_id);
-            return newSet;
-          });
-        }, 1000);
-      }
-    };
-    return (
-      <ul>
-        {ingredients.map(ing => (
-          <li key={ing.ingredient_id || ing.name} className="flex items-center gap-2 mb-1">
-            <Link href={`/ingredient/${ing.ingredient_id}`} className="flex-1 min-w-0 hover:underline focus:underline outline-none">
-              <span>{ing.name} {ing.amount} {ing.unit}</span>
-            </Link>
-            {ing.ingredient_id && (
-              <button
-                onClick={() => toggleFavorite(ing.ingredient_id)}
-                className={favoriteMap[ing.ingredient_id] ? 'text-orange-400' : 'text-gray-400'}
-                aria-label="즐겨찾기"
-              >
-                {favoriteMap[ing.ingredient_id] ? '♥' : '♡'}
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-    );
-  }
-
-  // SupabaseRecipe → Recipe 변환 시 id undefined 방지 및 타입 일치
+  // SupabaseRecipe → Recipe 변환
   function supabaseToRecipe(r: any): Recipe {
     return {
       id: r.id || '',
@@ -344,131 +488,14 @@ export default function RecipeDetailPage() {
         amount: ing.amount,
         unit: ing.unit,
         shop_url: ing.shop_url || ing.shopUrl || '',
+        is_favorite: ing.is_favorite || false,
       })),
       steps: r.steps || [],
-      videourl: r.videourl || '', // snake_case로 통일
+      videourl: r.videourl || '',
       channel: r.channel,
       createdat: r.createdat ? new Date(r.createdat) : new Date(),
       isfavorite: r.isfavorite || false
     };
-  }
-
-  // 재료 그룹 분리 함수
-  function getIngredientGroups(recipe: Recipe) {
-    const commonIngredients: RecipeIngredient[] = [];
-    const extraIngredients: RecipeIngredient[] = [];
-
-    const ingredientMap: Record<string, RecipeIngredient> = {};
-    recipe.ingredients.forEach(ing => {
-      ingredientMap[ing.ingredient_id] = ing;
-    });
-
-    const allIngredients = Object.values(ingredientMap);
-
-    allIngredients.forEach(ing => {
-      if (ing.shop_url) {
-        commonIngredients.push(ing);
-      } else {
-        extraIngredients.push(ing);
-      }
-    });
-
-    return { common: commonIngredients, extra: extraIngredients };
-  }
-
-  // 필요한 재료 표시 부분에 하트 버튼 추가
-  function IngredientFavoriteRow({ ingredient }: { ingredient: RecipeIngredient }) {
-    const [ingredientInfo, setIngredientInfo] = useState(ingredient);
-    const [isFavorite, setIsFavorite] = useState(false);
-    
-    useEffect(() => {
-      if (!ingredient.ingredient_id) return; // id 유효성 체크
-      // 토글 중에는 데이터 fetch 무시 (깜빡임 방지)
-      if (ingredientFavoriteTogglingIds.has(ingredient.ingredient_id)) return;
-      
-      supabase
-        .from('ingredients_master')
-        .select('is_favorite, shop_url')
-        .eq('id', ingredient.ingredient_id)
-        .single()
-        .then(({ data }) => {
-          setIsFavorite(data?.is_favorite === 'true');
-          setIngredientInfo((prev) => ({ ...prev, shop_url: data?.shop_url || prev.shop_url }));
-        });
-    }, [ingredient.ingredient_id, ingredientFavoriteTogglingIds]);
-    
-    const toggleFavorite = async () => {
-      if (!ingredient.ingredient_id) return; // id 유효성 체크
-      if (ingredientFavoriteTogglingIds.has(ingredient.ingredient_id)) return; // 중복 클릭 방지
-      
-      setIngredientFavoriteTogglingIds(prev => new Set(prev).add(ingredient.ingredient_id));
-      const newVal = !isFavorite;
-      try {
-        setIsFavorite(newVal); // 로컬 상태 즉시 업데이트
-        // DB 업데이트
-        await supabase
-          .from('ingredients_master')
-          .update({ is_favorite: newVal ? 'true' : 'false' })
-          .eq('id', ingredient.ingredient_id);
-      } catch (error) {
-        console.error('재료 즐겨찾기 토글 실패:', error);
-        // 실패 시 원래 상태로 복원
-        setIsFavorite(!newVal);
-      } finally {
-        // 토글 완료 후 잠시 대기 후 토글 중 상태 해제
-        setTimeout(() => {
-          setIngredientFavoriteTogglingIds(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(ingredient.ingredient_id);
-            return newSet;
-          });
-        }, 1000);
-      }
-    };
-    return (
-      <div>
-        {/* 반응형: 모바일에서는 세로, 데스크탑(sm 이상)에서는 가로로 배치 */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 w-full">
-          <div className="flex flex-row items-center w-full gap-2">
-            <Link href={`/ingredient/${ingredientInfo.ingredient_id}`} className="flex-1 min-w-0 hover:underline focus:underline outline-none">
-              <span className="text-white font-medium">{ingredientInfo.name}</span>
-            </Link>
-            {/* 구매하기 버튼을 수량/단위보다 왼쪽에 배치 */}
-            {ingredientInfo.shop_url && (
-              <a
-                href={ingredientInfo.shop_url?.startsWith('http') ? ingredientInfo.shop_url : `https://${ingredientInfo.shop_url}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center px-2 py-1.5 bg-orange-500 text-white rounded-full text-xs font-bold hover:bg-orange-600 transition shadow whitespace-nowrap"
-                style={{ minWidth: 'auto', lineHeight: '1.2' }}
-              >
-                구매하기
-              </a>
-            )}
-            <span className="text-gray-400 text-sm whitespace-nowrap">{ingredientInfo.amount} {ingredientInfo.unit}</span>
-            <div className="flex flex-row items-center gap-1 ml-auto">
-              {ingredientInfo.ingredient_id && (
-                <button
-                  onClick={toggleFavorite}
-                  className={`text-lg ${isFavorite ? 'text-orange-400' : 'text-gray-400'}`}
-                  aria-label="재료 즐겨찾기"
-                >
-                  {isFavorite ? (
-                    <svg className="w-5 h-5" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                    </svg>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
   }
 
   if (loading) {
@@ -499,7 +526,19 @@ export default function RecipeDetailPage() {
           <h2 className="text-white text-xl font-bold mb-3">레시피를 찾을 수 없습니다</h2>
           <p className="text-gray-400 mb-6">요청하신 레시피가 존재하지 않거나 삭제되었습니다</p>
           <button 
-            onClick={() => router.back()} 
+            onClick={() => {
+              // 이전 탭 정보에 따라 적절한 페이지로 이동
+              if (fromTab === 'recipebook') {
+                router.push('/?tab=recipebook');
+              } else if (fromTab === 'search') {
+                router.push('/?tab=search');
+              } else if (fromTab === 'favorites') {
+                router.push('/?tab=favorites');
+              } else {
+                // 기본값은 홈 탭
+                router.push('/?tab=home');
+              }
+            }}
             className="px-6 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-xl font-medium hover:from-orange-500 hover:to-orange-600 transition-all duration-200 shadow-lg"
           >
             돌아가기
@@ -509,73 +548,74 @@ export default function RecipeDetailPage() {
     );
   }
 
-  // 재료 표시용
-  const displayIngredients = recipe.ingredients;
-
-  // 관련 레시피(추후 Supabase 연동 확장)
-  const relatedWithEmoji = related.map(r => ({
-    ...r,
-    ingredients: r.ingredients.map(ing => ({
-      ...ing,
-    }))
-  }));
-
   return (
-    <div className="min-h-screen bg-black pb-24 px-2 sm:px-4 pt-4 sm:pt-6 overflow-y-auto max-w-md mx-auto">
+    <main className="min-h-screen px-4 pb-24 pt-6 max-w-md mx-auto">
       <YoristHeader />
       {editMode ? (
         <ManualRecipeForm
           initialRecipe={recipe}
           onSave={handleEditSave}
-          onCancel={() => setEditMode(false)}
+          onCancel={() => {
+            setEditMode(false);
+            setIsEditing(false);
+            syncManager.current.forceCompleteAll();
+          }}
         />
       ) : (
         <>
-          {/* 레시피 제목 - 심플하게 상단에만 표시 */}
-          <div className="mb-3 sm:mb-4 relative">
-            {/* 뒤로가기 버튼을 absolute로 배치 */}
-              <button
-                onClick={() => router.back()}
-              className="absolute left-0 top-1/2 -translate-y-1/2 p-1 rounded-full bg-[#232323] hover:bg-[#2a2a2a] text-white flex items-center justify-center focus:outline-none"
-                aria-label="뒤로가기"
-                style={{ minWidth: 32, minHeight: 32 }}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-            {/* 제목과 밑줄을 flex-col + items-center로 중앙 정렬 */}
-            <div className="flex flex-col items-center w-full">
-                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight text-center">{recipe.title}</h1>
-                <div className="w-1/2 h-[2.5px] bg-gradient-to-r from-orange-400 to-orange-500 rounded-full mx-auto mt-2" aria-hidden="true"></div>
+          {/* 헤더 섹션 */}
+          <div className="mb-4 relative">
+            <button
+              onClick={() => {
+                // 이전 탭 정보에 따라 적절한 페이지로 이동
+                if (fromTab === 'recipebook') {
+                  router.push('/?tab=recipebook');
+                } else if (fromTab === 'search') {
+                  router.push('/?tab=search');
+                } else if (fromTab === 'favorites') {
+                  router.push('/?tab=favorites');
+                } else {
+                  // 기본값은 홈 탭
+                  router.push('/?tab=home');
+                }
+              }}
+              className="absolute left-0 top-1/2 -translate-y-1/2 p-2 rounded-full bg-[#232323] hover:bg-[#2a2a2a] text-white flex items-center justify-center focus:outline-none transition-colors"
+              aria-label="뒤로가기"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            
+            <div className="flex flex-col items-center w-full px-12">
+              <h1 className="text-lg font-bold text-white leading-tight text-center">{recipe.title}</h1>
+              <div className="w-1/2 h-0.5 bg-gradient-to-r from-orange-400 to-orange-500 rounded-full mx-auto mt-2" aria-hidden="true"></div>
             </div>
             
-            {/* 레시피 즐겨찾기 하트 버튼 - 화면 우측에 고정 */}
             <button
               onClick={async () => {
-                if (isFavoriteToggling) return; // 중복 클릭 방지
+                if (syncManager.current.isUpdating('favorite')) return;
                 
-                setIsFavoriteToggling(true);
+                syncManager.current.startUpdate('favorite');
+                
+                // 낙관적 업데이트: UI를 즉시 변경
+                setRecipe(prev => prev ? { ...prev, isfavorite: !prev.isfavorite } : null);
+
                 try {
                   await recipeService.toggleFavorite(recipe.id, !recipe.isfavorite);
-                  // 로컬 상태 즉시 업데이트
-                  setRecipe({ ...recipe, isfavorite: !recipe.isfavorite });
                 } catch (error) {
                   console.error('레시피 즐겨찾기 토글 실패:', error);
-                  // 실패 시 원래 상태로 복원
-                  setRecipe({ ...recipe, isfavorite: recipe.isfavorite });
+                  // 실패 시 UI 롤백
+                  setRecipe(prev => prev ? { ...prev, isfavorite: !prev.isfavorite } : null);
                 } finally {
-                  // 토글 완료 후 잠시 대기 후 실시간 구독 재활성화
                   setTimeout(() => {
-                    setIsFavoriteToggling(false);
+                    syncManager.current.finishUpdate('favorite');
                   }, 1000);
                 }
               }}
-              className={`absolute right-4 top-1/2 -translate-y-1/2 ${
-                recipe.isfavorite 
-                  ? 'text-orange-400' 
-                  : 'text-gray-400'
-              }`}
+              className={`absolute right-0 top-1/2 -translate-y-1/2 p-2 ${
+                recipe.isfavorite ? 'text-orange-400' : 'text-gray-400'
+              } hover:text-orange-400 transition-colors`}
               aria-label={recipe.isfavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
             >
               <svg
@@ -594,11 +634,9 @@ export default function RecipeDetailPage() {
             </button>
           </div>
           
-          {/* 썸네일+설명 토글을 하나의 카드로 통합 */}
-          <div className="mb-1 sm:mb-4 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg sm:rounded-2xl shadow-lg overflow-hidden">
-            {/* 이미지 썸네일 */}
+          {/* 썸네일 섹션 */}
+          <div className="mb-6 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl shadow-lg overflow-hidden">
             <div className="relative w-full aspect-video">
-              {/* 유튜브 썸네일 렌더링 - DB 필드명과 일치: videoUrl 또는 videourl 모두 지원 */}
               {(() => {
                 const videoUrl = recipe.videourl || '';
                 const videoId = getYouTubeVideoId(videoUrl);
@@ -607,292 +645,317 @@ export default function RecipeDetailPage() {
                   return (
                     <img
                       src={thumbnailUrl}
-                  alt="유튜브 썸네일"
-                  className="w-full h-full object-cover"
-                />
+                      alt="유튜브 썸네일"
+                      className="w-full h-full object-cover"
+                    />
                   );
                 } else {
                   return (
-                <div className="w-full h-full bg-[#232323] flex items-center justify-center text-gray-500 text-base sm:text-lg">
-                  대표 이미지 없음
-                </div>
+                    <div className="w-full h-full bg-[#232323] flex items-center justify-center text-gray-500 text-lg">
+                      대표 이미지 없음
+                    </div>
                   );
                 }
               })()}
-              {/* 유튜브 바로가기 버튼은 유지 */}
+              
               {(() => {
                 const videoUrl = recipe.videourl || '';
                 return videoUrl && getYouTubeVideoId(videoUrl) ? (
-                <a
+                  <a
                     href={videoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 bg-red-600 text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-2 shadow-lg hover:bg-red-700 transition-colors text-xs sm:text-sm font-bold"
-                >
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M10 15l5.19-3L10 9v6zm12-3c0-5.52-4.48-10-10-10S2 6.48 2 12s4.48 10 10 10 10-4.48 10-10zm-2 0c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8 8 3.58 8 8z" />
-                  </svg>
-                  유튜브에서 보기
-                </a>
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="absolute bottom-2 right-2 bg-red-600 text-white rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-lg hover:bg-red-700 transition-colors text-xs font-bold"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M10 15l5.19-3L10 9v6zm12-3c0-5.52-4.48-10-10-10S2 6.48 2 12s4.48 10 10 10 10-4.48 10-10zm-2 0c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8 8 3.58 8 8z" />
+                    </svg>
+                    유튜브
+                  </a>
                 ) : null;
               })()}
             </div>
-            {/* 레시피 설명 토글 - 여백 더 축소 */}
+            
             {recipe.description && (
-              <div className="p-1 sm:p-4 border-t border-[#232323]">
+              <div className="p-3 border-t border-[#232323]">
                 <button
-                  className="flex items-center gap-1 text-orange-400 text-xs sm:text-xs font-semibold focus:outline-none hover:underline"
+                  className="flex items-center gap-1 text-orange-400 text-xs font-semibold focus:outline-none hover:underline"
                   onClick={() => setShowDescription(prev => !prev)}
                   aria-expanded={showDescription}
                   aria-controls="recipe-desc"
                 >
                   {showDescription ? '설명 닫기' : '설명 보기'}
-                  <svg className={`w-4 h-4 transition-transform ${showDescription ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <svg className={`w-3 h-3 transition-transform ${showDescription ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
                 {showDescription && (
-                  <p id="recipe-desc" className="text-gray-400 text-xs sm:text-sm mt-0.5 leading-relaxed animate-fadeIn">{recipe.description}</p>
+                  <p id="recipe-desc" className="text-gray-400 text-xs mt-2 leading-relaxed animate-fadeIn">{recipe.description}</p>
                 )}
               </div>
             )}
           </div>
 
-          {/* 레시피 정보 카드(상단 네비+제목+버튼+채널+설명) */}
-          {/* (불필요한 레시피 정보 카드 전체 삭제) */}
-
-          {/* 일반 모드(재료, 조리단계, 관련 레시피 등)는 editMode가 아닐 때만 렌더링 */}
-          {!editMode && (
-            <>
-              {/* 필요한 재료 - 한 줄 리스트형, 구분선, 심플 구매 버튼, 가독성 강조 */}
-              <div className="mt-4 sm:mt-8">
-                <h2 className="text-base sm:text-xl font-bold text-white mb-2 sm:mb-4 flex items-center gap-1 sm:gap-2">
-                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  필요한 재료
-                </h2>
-                <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                  {displayIngredients.map((ingredient) => (
-                    // 카드 전체를 Link로 감싸 재료 상세로 이동
-                    <Link
-                      key={ingredient.ingredient_id}
-                      href={`/ingredient/${ingredient.ingredient_id}`}
-                      className="block"
-                      tabIndex={0}
-                    >
-                      {/* 재료카드 내부 버튼 그룹 구조 개선 - 오른쪽 padding, 버튼 위치 조정 */}
-                      <div className="bg-[#232323] rounded-xl px-3 py-2 mb-2 flex items-center relative pr-14 overflow-hidden">
-                        {/* 재료명, 수량 */}
-                        <span className="font-semibold text-white truncate max-w-[60px] ml-1 text-xs">{ingredient.name}</span>
-                        <span className="ml-1 text-gray-400 text-xs truncate">{ingredient.amount} {ingredient.unit}</span>
-                        {/* 버튼 그룹 - 오른쪽 끝에 고정, 위치 조정 */}
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 items-center">
-                          {/* 장바구니 버튼 - 하트 왼쪽 */}
-                          {ingredient.shop_url && (
-                            <a
-                              href={ingredient.shop_url?.startsWith('http') ? ingredient.shop_url : `https://${ingredient.shop_url}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center justify-center text-white hover:text-orange-400 transition"
-                              aria-label="구매링크"
-                              style={{ lineHeight: '1.2' }}
-                              onClick={e => e.stopPropagation()}
-                              tabIndex={-1}
-                            >
-                              {/* 장바구니 아이콘만 표시, 테두리/배경 없음 */}
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <path d="M3 3h2l.4 2M7 13h10l4-8H5.4" strokeLinecap="round" strokeLinejoin="round"/>
-                                <circle cx="9" cy="21" r="1" />
-                                <circle cx="20" cy="21" r="1" />
-                              </svg>
-                            </a>
-                          )}
-                          {/* 즐겨찾기 버튼 - 항상 맨 오른쪽 */}
-                          <button
-                            onClick={async e => {
-                              e.preventDefault(); e.stopPropagation();
-                              if (ingredient.ingredient_id) {
-                                // 1. DB에서 현재 즐겨찾기 상태 조회 및 토글
-                                const { data } = await supabase
-                                  .from('ingredients_master')
-                                  .select('is_favorite')
-                                  .eq('id', ingredient.ingredient_id)
-                                  .single();
-                                const newVal = !data?.is_favorite;
-                                await supabase
-                                  .from('ingredients_master')
-                                  .update({ is_favorite: newVal ? 'true' : 'false' })
-                                  .eq('id', ingredient.ingredient_id);
-                                triggerIngredientSync();
-                                // 2. 로컬 상태도 즉시 반영 (하트 색상 즉시 변경)
-                                setRecipe(prev => prev ? {
-                                  ...prev,
-                                  ingredients: prev.ingredients.map(ing =>
-                                    ing.ingredient_id === ingredient.ingredient_id
-                                      ? { ...ing, is_favorite: newVal }
-                                      : ing
-                                  )
-                                } : prev);
-                              }
-                            }}
-                            className="text-lg focus:outline-none text-gray-400 hover:text-orange-400"
-                            aria-label="즐겨찾기"
-                            tabIndex={-1}
-                          >
-                            <svg className="w-3 h-3" fill={ingredient.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              {/* 조리 단계 - 아래로 이동 (상세화면에서 중요 체크박스 UI 추가) */}
-              <div className="mt-4 sm:mt-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <h2 className="text-base sm:text-xl font-bold text-white flex items-center gap-1 sm:gap-2 mb-0">
-                    <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    조리 단계
-                  </h2>
-                  {/* 커스텀 체크박스: 체크 시 주황, 해제 시 회색, 테두리/배경 없음 */}
-                  <label className={`flex items-center gap-1 ml-auto text-xs font-semibold cursor-pointer select-none transition-colors ${showImportantOnly ? 'text-orange-400' : 'text-gray-400'}`}
-                    aria-checked={showImportantOnly}
-                    tabIndex={0}
-                    role="checkbox"
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setShowImportantOnly(v => !v); }}
-                  >
-                    {/* 실제 체크박스는 숨김 */}
-                    <input
-                      type="checkbox"
-                      checked={showImportantOnly}
-                      onChange={e => setShowImportantOnly(e.target.checked)}
-                      className="hidden"
-                      tabIndex={-1}
-                    />
-                    {/* 체크 표시(v)만 심플하게 */}
-                    <span className="text-lg align-middle select-none" aria-hidden="true">
-                      {showImportantOnly ? '✔' : '✔'}
+          {/* 재료 섹션 */}
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+              <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              필요한 재료
+            </h2>
+            <div className="grid grid-cols-2 gap-2">
+              {recipe.ingredients.map((ingredient, index) => (
+                <Link
+                  key={`${ingredient.ingredient_id || ingredient.name}-${index}`}
+                  href={`/ingredient/${ingredient.ingredient_id}`}
+                  className="block group"
+                >
+                  <div className="bg-[#232323] rounded-md p-1.5 flex items-center justify-between gap-2 group-hover:bg-[#2a2a2a] transition-colors">
+                    <span className="flex-1 font-semibold text-white text-sm truncate" title={ingredient.name}>
+                      {ingredient.name}
                     </span>
-                    중요 조리단계만 보기
-                  </label>
-                </div>
-                <div className="space-y-1 sm:space-y-2">
-                  {(showImportantOnly ? recipe.steps.filter(step => step.isImportant) : recipe.steps).map((step, i) => (
-                    <div
-                      key={`${step.description}-${i}`}
-                      className={`border border-[#2a2a2a] rounded-lg sm:rounded-2xl p-2 sm:p-3 shadow-lg hover:border-[#3a3a3a] transition-all duration-200 flex items-center ${step.isImportant ? 'bg-orange-500/20' : 'bg-[#1a1a1a]'}`}
-                    >
-                      <div className="flex items-start gap-2 sm:gap-3 flex-1">
-                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center text-white font-bold text-base sm:text-lg shadow-lg flex-shrink-0">
-                          {i + 1}
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm sm:text-base text-white leading-relaxed mb-0.5 sm:mb-1">{step.description}</p>
-                        </div>
-                      </div>
-                      {/* 중요 체크박스 - 상세화면에서 바로 토글 */}
+                    <div className="flex items-center flex-shrink-0">
+                      <span className="text-gray-400 text-xs whitespace-nowrap mr-2">{ingredient.amount} {ingredient.unit}</span>
+                      {ingredient.shop_url && (
+                        <button
+                          onClick={e => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const url = ingredient.shop_url?.startsWith('http') ? ingredient.shop_url : `https://${ingredient.shop_url}`;
+                            window.open(url, '_blank', 'noopener,noreferrer');
+                          }}
+                          className="p-1 text-white hover:text-orange-400 transition-colors"
+                          aria-label="구매링크"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path d="M3 3h2l.4 2M7 13h10l4-8H5.4" strokeLinecap="round" strokeLinejoin="round"/>
+                            <circle cx="9" cy="21" r="1" />
+                            <circle cx="20" cy="21" r="1" />
+                          </svg>
+                        </button>
+                      )}
+                      
                       <button
-                        onClick={async () => {
-                          const newSteps = [...recipe.steps];
-                          newSteps[i] = { ...newSteps[i], isImportant: !newSteps[i].isImportant };
-                          setRecipe({ ...recipe, steps: newSteps });
-                          await supabase
-                            .from('recipes')
-                            .update({ steps: newSteps })
-                            .eq('id', recipe.id);
+                        onClick={async e => {
+                          e.preventDefault(); e.stopPropagation();
+                          if (!ingredient.ingredient_id) return;
+                          
+                          if (syncManager.current.isUpdating(`ingredient-${ingredient.ingredient_id}`)) return;
+                          
+                          syncManager.current.startUpdate(`ingredient-${ingredient.ingredient_id}`);
+                          
+                          // 낙관적 업데이트: UI를 즉시 변경
+                          setRecipe(prev => prev ? {
+                            ...prev,
+                            ingredients: prev.ingredients.map(ing =>
+                              ing.ingredient_id === ingredient.ingredient_id
+                                ? { ...ing, is_favorite: !ing.is_favorite }
+                                : ing
+                            )
+                          } : prev);
+
+                          try {
+                            const { data } = await supabase
+                              .from('ingredients_master')
+                              .select('is_favorite')
+                              .eq('id', ingredient.ingredient_id)
+                              .single();
+                            const newVal = !data?.is_favorite;
+                            await supabase
+                              .from('ingredients_master')
+                              .update({ is_favorite: newVal ? 'true' : 'false' })
+                              .eq('id', ingredient.ingredient_id);
+                            
+                            triggerIngredientSync();
+                          } catch (error) {
+                            console.error('재료 즐겨찾기 토글 실패:', error);
+                            // 실패 시 UI 롤백
+                            setRecipe(prev => prev ? {
+                              ...prev,
+                              ingredients: prev.ingredients.map(ing =>
+                                ing.ingredient_id === ingredient.ingredient_id
+                                  ? { ...ing, is_favorite: !ing.is_favorite }
+                                  : ing
+                              )
+                            } : prev);
+                          } finally {
+                            setTimeout(() => {
+                              syncManager.current.finishUpdate(`ingredient-${ingredient.ingredient_id}`);
+                            }, 1000);
+                          }
                         }}
-                        className={`ml-3 transition-all duration-200 ${
-                          step.isImportant 
-                            ? 'text-orange-400' 
-                            : 'text-gray-400 hover:text-gray-300'
-                        }`}
-                        aria-label="중요 단계 표시"
+                        className="p-1 text-gray-400 hover:text-orange-400 transition-colors"
+                        aria-label="즐겨찾기"
                       >
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        <svg className="w-3.5 h-3.5" fill={ingredient.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                         </svg>
                       </button>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 관련 레시피 */}
-              <div className="mt-6 sm:mt-10">
-                <h2 className="text-base sm:text-xl font-bold text-white mb-2 sm:mb-4 flex items-center gap-1 sm:gap-2">
-                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                  </svg>
-                  관련 레시피
-                </h2>
-                {related.length === 0 ? (
-                  <div className="bg-black border border-[#232323] rounded-lg sm:rounded-2xl p-3 sm:p-6 text-gray-500 text-center">관련 레시피가 없습니다</div>
-                ) : (
-                  <div className="flex flex-col gap-2 sm:gap-4">
-                    {/* 관련 레시피는 최대 5개만 표시 */}
-                    {related.slice(0, 5).map((rel: any) => (
-                      <Link key={rel.id} href={`/recipe/${rel.id}`} passHref legacyBehavior>
-                        <a style={{ display: 'block' }}>
-                          <div className="bg-black border border-[#232323] rounded-lg sm:rounded-2xl p-3 sm:p-5 hover:border-orange-400 transition cursor-pointer">
-                            <div className="text-white font-bold text-base sm:text-lg mb-1 sm:mb-2">{rel.title}</div>
-                            <div className="mb-1 sm:mb-2">
-                              <div className="flex flex-wrap gap-1 sm:gap-2">
-                                {rel._commonNames.map((name: string, idx: number) => (
-                                  <span key={name + idx} className="bg-orange-500 text-white text-xs px-2 py-1 rounded-full font-bold">{name}</span>
-                                ))}
-                                {rel.ingredients.filter((ing: any) => !rel._commonNames.includes(ing.name)).map((ing: any) => (
-                                  <span key={ing.ingredient_id} className="bg-[#232323] text-gray-400 text-xs px-2 py-1 rounded-full border border-[#3a3a3a]">{ing.name}</span>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </a>
-                      </Link>
-                    ))}
                   </div>
-                )}
-              </div>
-            </>
-          )}
-          {/* 페이지 하단 flow에 맞춰 수정/삭제 버튼을 한 줄에 배치 */}
-          {/* 1. 레시피 수정/삭제 버튼 크기 및 텍스트 축소 */}
-          {!editMode && (
-            <div className="flex gap-2 mt-8 mb-8">
-              {/* 레시피 수정 버튼 */}
-              <button
-                className="flex-1 py-2 rounded-lg bg-[#232323] border text-orange-400 border-orange-400 font-bold text-xs shadow transition-all duration-200 focus:outline-none hover:border-orange-500 hover:text-orange-500"
-                onClick={() => setEditMode(true)}
-                aria-label="레시피 수정"
-              >
-                레시피 수정
-              </button>
-              {/* 레시피 삭제 버튼 */}
-              <button
-                className="flex-1 py-2 rounded-lg bg-[#232323] border text-red-500 border-red-500 font-bold text-xs shadow transition-all duration-200 focus:outline-none hover:border-red-600 hover:text-red-600"
-                onClick={handleDelete}
-                aria-label="레시피 삭제"
-              >
-                레시피 삭제
-              </button>
+                </Link>
+              ))}
             </div>
-          )}
+          </div>
+
+          {/* 조리 단계 섹션 */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                조리 단계
+              </h2>
+              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none transition-colors text-gray-400 hover:text-orange-400">
+                <input
+                  type="checkbox"
+                  checked={showImportantOnly}
+                  onChange={e => setShowImportantOnly(e.target.checked)}
+                  className="w-3.5 h-3.5 text-orange-400 bg-[#232323] border-[#3a3a3a] rounded focus:ring-orange-400 focus:ring-2"
+                />
+                중요 단계만 보기
+              </label>
+            </div>
+            
+            <div className="space-y-3">
+              {(showImportantOnly ? recipe.steps.filter(step => step.isImportant) : recipe.steps).map((step, i) => (
+                <div
+                  key={`step-${i}-${step.description.substring(0, 20)}`}
+                  className={`border border-[#2a2a2a] rounded-xl p-3 shadow-lg hover:border-[#3a3a3a] transition-all duration-200 flex items-start gap-3 ${
+                    step.isImportant ? 'bg-orange-500/10 border-orange-500/30' : 'bg-[#1a1a1a]'
+                  }`}
+                >
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center text-white font-bold text-base shadow-lg flex-shrink-0">
+                    {i + 1}
+                  </div>
+                  <div className="flex-1 pt-0.5">
+                    <p className="text-white text-sm leading-relaxed">{step.description}</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (syncManager.current.isUpdating('step')) return;
+
+                      syncManager.current.startUpdate('step');
+
+                      const originalSteps = recipe.steps;
+                      const newSteps = recipe.steps.map((s, index) => 
+                        i === index ? { ...s, isImportant: !s.isImportant } : s
+                      );
+
+                      // 낙관적 업데이트: UI를 즉시 변경
+                      setRecipe(prev => prev ? { ...prev, steps: newSteps } : null);
+
+                      try {
+                        await supabase
+                          .from('recipes')
+                          .update({ steps: newSteps })
+                          .eq('id', recipe.id);
+                      } catch (error) {
+                        console.error('중요 단계 업데이트 실패:', error);
+                        // 실패 시 UI 롤백
+                        setRecipe(prev => prev ? { ...prev, steps: originalSteps } : null);
+                      } finally {
+                        setTimeout(() => {
+                          syncManager.current.finishUpdate('step');
+                        }, 1000);
+                      }
+                    }}
+                    className={`p-2 transition-all duration-200 ${
+                      step.isImportant 
+                        ? 'text-orange-400' 
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                    aria-label="중요 단계 표시"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 관련 레시피 섹션 */}
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+              <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+              관련 레시피
+            </h2>
+            {related.length === 0 ? (
+              <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-6 text-gray-500 text-center">
+                관련 레시피가 없습니다
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {related.slice(0, 5).map((rel: any) => (
+                  <Link key={rel.id} href={`/recipe/${rel.id}`}>
+                    <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-3 hover:border-orange-400 transition-colors">
+                      <div className="text-white font-bold text-base mb-1.5">{rel.title}</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {rel._commonNames.map((name: string, idx: number) => (
+                          <span key={name + idx} className="bg-orange-500 text-white text-xs px-2 py-1 rounded-full font-bold">
+                            {name}
+                          </span>
+                        ))}
+                        {rel.ingredients.filter((ing: any) => !rel._commonNames.includes(ing.name)).map((ing: any) => (
+                          <span key={ing.ingredient_id} className="bg-[#232323] text-gray-400 text-xs px-2 py-1 rounded-full border border-[#3a3a3a]">
+                            {ing.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 액션 버튼 */}
+          <div className="flex gap-2 mb-6">
+            <button
+              className="flex-1 py-2.5 rounded-lg bg-[#232323] border border-orange-400 text-orange-400 text-sm font-bold shadow transition-all duration-200 hover:border-orange-500 hover:text-orange-500 focus:outline-none"
+              onClick={() => {
+                setIsEditing(true);
+                setEditMode(true);
+              }}
+              aria-label="레시피 수정"
+            >
+              레시피 수정
+            </button>
+            <button
+              className="flex-1 py-2.5 rounded-lg bg-[#232323] border border-red-500 text-red-500 text-sm font-bold shadow transition-all duration-200 hover:border-red-600 hover:text-red-600 focus:outline-none"
+              onClick={handleDelete}
+              aria-label="레시피 삭제"
+            >
+              레시피 삭제
+            </button>
+          </div>
         </>
       )}
       <BottomNavigation
         activeTab="recipebook"
         onTabChange={(tab) => {
-          if (tab === 'home') router.push('/');
-          else if (tab === 'recipebook') router.push('/?tab=recipebook');
-          else if (tab === 'favorites') router.push('/?tab=favorites');
-          else if (tab === 'search') router.push('/?tab=search');
+          console.log('Recipe detail onTabChange called with:', tab);
+          if (tab === 'home') {
+            console.log('Navigating to home');
+            router.push('/');
+          } else if (tab === 'recipebook') {
+            console.log('Navigating to recipebook');
+            router.push('/?tab=recipebook');
+          } else if (tab === 'favorites') {
+            console.log('Navigating to favorites');
+            router.push('/?tab=favorites');
+          } else if (tab === 'search') {
+            console.log('Navigating to search');
+            router.push('/?tab=search');
+          }
         }}
       />
-    </div>
+    </main>
   );
 }
