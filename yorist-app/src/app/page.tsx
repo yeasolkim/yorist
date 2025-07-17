@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react'; // Suspense 추가
 import { Recipe, NavigationTab, RecipeIngredient } from '@/lib/types';
 import { getRecipesAsync, saveRecipeAsync } from '@/lib/recipeUtils';
 import RecipeSection from '@/components/RecipeSection';
