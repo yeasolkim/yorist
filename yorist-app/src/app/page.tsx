@@ -355,11 +355,11 @@ function HomePage() {
   };
 
   return (
-    <main className="relative min-h-screen px-4 pb-24 max-w-md mx-auto w-full">
+    <main className="relative h-screen max-w-md mx-auto w-full flex flex-col overflow-hidden">
       <YoristHeader />
       
-      {/* 메인 컨텐츠 영역 */}
-      <div className="pt-4">
+      {/* 메인 컨텐츠 영역 - 스크롤 가능한 영역 */}
+      <div className="flex-1 overflow-y-auto px-4 pb-24">
         {/* 홈 탭 컨텐츠 */}
         {activeTab === 'home' && (
           <>

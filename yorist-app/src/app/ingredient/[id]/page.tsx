@@ -286,7 +286,8 @@ export default function IngredientDetailPage() {
   }
 
   return (
-    <main className="min-h-screen px-4 pb-24 pt-6 max-w-md mx-auto">
+    <main className="h-screen max-w-md mx-auto flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto px-4 pb-24 pt-6">
       <YoristHeader />
 
       {editMode ? (
@@ -418,6 +419,7 @@ export default function IngredientDetailPage() {
           </div>
         </>
       )}
+      </div>
 
       <BottomNavigation activeTab="recipebook" onTabChange={(tab) => router.push(`/?tab=${tab}`)} />
     </main>

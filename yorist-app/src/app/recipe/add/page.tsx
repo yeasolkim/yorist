@@ -193,7 +193,7 @@ export default function AddRecipePage() {
   };
 
   return (
-    <div className="min-h-screen bg-black pb-20">
+    <div className="h-screen bg-black flex flex-col overflow-hidden">
       {/* 상단 헤더 */}
       <header className="bg-[#181818] border-b border-[#232323] px-4 py-3 flex items-center justify-between">
         <button
@@ -209,7 +209,7 @@ export default function AddRecipePage() {
       </header>
 
       {/* 메인 폼 */}
-      <main className="p-2 sm:p-4 space-y-4 sm:space-y-6 max-w-md mx-auto overflow-x-hidden overscroll-none" style={{ maxWidth: '100vw', overscrollBehavior: 'none' }}>
+      <main className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-4 sm:space-y-6 max-w-md mx-auto pb-20" style={{ maxWidth: '100vw' }}>
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {/* 기본 정보 */}
           <section className="bg-[#181818] rounded-lg sm:rounded-2xl p-3 sm:p-5 space-y-3 sm:space-y-4 shadow-lg border border-[#232323]">
