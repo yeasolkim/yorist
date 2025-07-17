@@ -3,7 +3,7 @@
   "/api/generate-recipe/route": "/api/generate-recipe",
   "/api/youtube-transcript/route": "/api/youtube-transcript",
   "/page": "/",
-  "/ingredient/[id]/page": "/ingredient/[id]",
   "/recipe/[id]/page": "/recipe/[id]",
+  "/ingredient/[id]/page": "/ingredient/[id]",
   "/recipe/add/page": "/recipe/add"
 }
