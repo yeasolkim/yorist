@@ -132,36 +132,52 @@ export default function FavoritesPage({
   }
 
   return (
-    <div className="px-4 pt-6"> {/* 중복된 스타일 제거 */}
-      {/* 헤더 */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-white mb-2">즐겨찾기</h2>
+    <div className="px-4 pt-6">
+      {/* 헤더 - 통일된 디자인 */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-8 h-8 bg-gradient-to-r from-orange-400 to-orange-500 rounded-xl flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-white">즐겨찾기</h1>
+        </div>
+        <p className="text-gray-400 text-sm ml-11">나만의 소중한 레시피와 재료 모음</p>
       </div>
 
-      {/* 즐겨찾기 레시피 목록 */}
-      {recipes.length === 0 ? (
-        <div className="text-center py-16 animate-fadeIn">
-          <div className="w-24 h-24 mx-auto mb-6 bg-[#1a1a1a] rounded-full flex items-center justify-center">
-            <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+      {/* 즐겨찾기 레시피 섹션 */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-6 h-6 bg-gradient-to-r from-orange-400 to-orange-500 rounded-lg flex items-center justify-center">
+            <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5V6.5A2.5 2.5 0 016.5 4H20v13M4 19.5V21a1 1 0 001 1h13.5a2.5 2.5 0 002.5-2.5V6.5" />
             </svg>
           </div>
-          <h3 className="text-white text-xl font-bold mb-3">즐겨찾기한 레시피가 없습니다</h3>
-          <p className="text-gray-400 mb-6 text-base">마음에 드는 레시피에 하트를 눌러 저장해보세요</p>
-          <div className="flex items-center justify-center gap-2 text-gray-500">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-            </svg>
-            <span className="text-sm">레시피 카드의 하트 버튼을 눌러보세요</span>
-          </div>
+          <h2 className="text-lg font-bold text-white">즐겨찾기 레시피</h2>
+          {recipes.length > 0 && (
+            <span className="text-orange-400 text-sm font-medium">({recipes.length})</span>
+          )}
         </div>
-      ) : (
-        <div className="animate-fadeIn">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-gray-400 text-sm">{recipes.length}개의 레시피</span>
+
+        {recipes.length === 0 ? (
+          <div className="bg-[#1a1a1a] rounded-2xl p-8 text-center animate-fadeIn border border-[#2a2a2a]">
+            <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-orange-400/20 to-orange-500/20 rounded-2xl flex items-center justify-center">
+              <svg className="w-8 h-8 text-orange-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              </svg>
+            </div>
+            <h3 className="text-white text-lg font-bold mb-2">아직 즐겨찾기한 레시피가 없어요</h3>
+            <p className="text-gray-400 text-sm mb-4">마음에 드는 레시피를 발견하면 하트를 눌러보세요</p>
+            <div className="inline-flex items-center gap-2 bg-[#232323] rounded-xl px-4 py-2">
+              <svg className="w-4 h-4 text-orange-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              </svg>
+              <span className="text-gray-300 text-sm font-medium">레시피 하트 버튼</span>
+            </div>
           </div>
-          
-          <div className="space-y-4">
+        ) : (
+          <div className="space-y-4 animate-fadeIn">
             {recipes.map(recipe => (
               <RecipeCard
                 key={recipe.id}
@@ -173,57 +189,94 @@ export default function FavoritesPage({
               />
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* 즐겨찾기한 식재료 섹션 */}
-      {favoriteIngredients.length > 0 && (
-        <div className="mt-8 animate-fadeIn">
-          <h2 className="text-lg font-bold text-white mb-3">즐겨찾기한 식재료</h2>
+      {/* 즐겨찾기 식재료 섹션 */}
+      <div className="animate-fadeIn">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-6 h-6 bg-gradient-to-r from-green-400 to-green-500 rounded-lg flex items-center justify-center">
+            <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-bold text-white">즐겨찾기 식재료</h2>
+          {favoriteIngredients.length > 0 && (
+            <span className="text-green-400 text-sm font-medium">({favoriteIngredients.length})</span>
+          )}
+        </div>
+
+        {favoriteIngredients.length === 0 ? (
+          <div className="bg-[#1a1a1a] rounded-2xl p-8 text-center border border-[#2a2a2a]">
+            <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-green-400/20 to-green-500/20 rounded-2xl flex items-center justify-center">
+              <svg className="w-8 h-8 text-green-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            </div>
+            <h3 className="text-white text-lg font-bold mb-2">즐겨찾기한 식재료가 없어요</h3>
+            <p className="text-gray-400 text-sm mb-4">자주 사용하는 식재료를 즐겨찾기에 추가해보세요</p>
+            <div className="inline-flex items-center gap-2 bg-[#232323] rounded-xl px-4 py-2">
+              <svg className="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              </svg>
+              <span className="text-gray-300 text-sm font-medium">식재료 하트 버튼</span>
+            </div>
+          </div>
+        ) : (
           <div className="grid grid-cols-2 gap-3">
             {favoriteIngredients.map(item => (
               <div key={item.id} className="block" onClick={() => window.location.href = `/ingredient/${item.id}` } tabIndex={0} role="button">
-                <div className="bg-[#232323] rounded-xl p-3 hover:border hover:border-orange-400 transition cursor-pointer h-14 flex items-center justify-between">
-                  {/* 재료명 */}
-                  <span className="text-white font-medium text-sm truncate">{item.name}</span>
-                  <div className="flex items-center gap-1">
-                    {item.shop_url && (
-                      <a 
-                        href={item.shop_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="flex items-center justify-center text-white hover:text-orange-400 transition"
-                        aria-label="구매링크"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        {/* 장바구니 아이콘만 표시, 테두리/배경 없음 */}
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path d="M3 3h2l.4 2M7 13h10l4-8H5.4" strokeLinecap="round" strokeLinejoin="round"/>
-                          <circle cx="9" cy="21" r="1" />
-                          <circle cx="20" cy="21" r="1" />
+                <div className="bg-[#1a1a1a] rounded-2xl p-4 hover:bg-[#232323] hover:border hover:border-green-400 transition-all duration-200 cursor-pointer border border-[#2a2a2a] group">
+                  <div className="flex items-center justify-between">
+                    {/* 재료명과 아이콘 */}
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className="w-8 h-8 bg-gradient-to-r from-green-400/20 to-green-500/20 rounded-lg flex items-center justify-center group-hover:from-green-400/30 group-hover:to-green-500/30 transition-colors">
+                        <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                         </svg>
-                      </a>
-                    )}
-                    <button
-                      onClick={async (e) => {
-                        e.preventDefault(); e.stopPropagation();
-                        if (!item.id) return;
-                        handleIngredientUnfavorite(item);
-                      }}
-                      className="text-lg text-orange-400 hover:text-orange-300 transition"
-                      aria-label="즐겨찾기 해제"
-                    >
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                      </svg>
-                    </button>
+                      </div>
+                      <span className="text-white font-medium text-sm truncate">{item.name}</span>
+                    </div>
+                    
+                    {/* 액션 버튼들 */}
+                    <div className="flex items-center gap-2 ml-2">
+                      {item.shop_url && (
+                        <a 
+                          href={item.shop_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 hover:text-blue-300 transition-all duration-200"
+                          aria-label="구매링크"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path d="M3 3h2l.4 2M7 13h10l4-8H5.4" strokeLinecap="round" strokeLinejoin="round"/>
+                            <circle cx="9" cy="21" r="1" />
+                            <circle cx="20" cy="21" r="1" />
+                          </svg>
+                        </a>
+                      )}
+                      <button
+                        onClick={async (e) => {
+                          e.preventDefault(); e.stopPropagation();
+                          if (!item.id) return;
+                          handleIngredientUnfavorite(item);
+                        }}
+                        className="p-1.5 rounded-lg bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 hover:text-orange-300 transition-all duration-200"
+                        aria-label="즐겨찾기 해제"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 } 

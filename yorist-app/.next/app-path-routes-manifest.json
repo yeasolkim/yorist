@@ -1,9 +1,9 @@
 {
-  "/api/generate-recipe/route": "/api/generate-recipe",
   "/_not-found/page": "/_not-found",
+  "/api/generate-recipe/route": "/api/generate-recipe",
   "/api/youtube-transcript/route": "/api/youtube-transcript",
-  "/recipe/add/page": "/recipe/add",
   "/ingredient/[id]/page": "/ingredient/[id]",
   "/recipe/[id]/page": "/recipe/[id]",
+  "/recipe/add/page": "/recipe/add",
   "/page": "/"
 }
