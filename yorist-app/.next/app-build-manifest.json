@@ -1,21 +1,58 @@
 {
   "pages": {
-    "/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/css/css-src_components_CookingLoader_css.css",
-      "static/chunks/app/page.js"
+    "/_not-found/page": [
+      "static/chunks/webpack-153cc7dff3cc28ec.js",
+      "static/chunks/fd9d1056-682491d09bf4394b.js",
+      "static/chunks/23-043803fa48e0235a.js",
+      "static/chunks/main-app-070b3da4559eb872.js",
+      "static/chunks/app/_not-found/page-010068727b74ea13.js"
     ],
     "/layout": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/css/css-src_app_globals_css.css",
-      "static/chunks/app/layout.js"
+      "static/chunks/webpack-153cc7dff3cc28ec.js",
+      "static/chunks/fd9d1056-682491d09bf4394b.js",
+      "static/chunks/23-043803fa48e0235a.js",
+      "static/chunks/main-app-070b3da4559eb872.js",
+      "static/css/2f0cb059a2af458c.css",
+      "static/chunks/app/layout-11d63f25ab3fdb3c.js"
     ],
-    "/_not-found/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/_not-found/page.js"
+    "/ingredient/[id]/page": [
+      "static/chunks/webpack-153cc7dff3cc28ec.js",
+      "static/chunks/fd9d1056-682491d09bf4394b.js",
+      "static/chunks/23-043803fa48e0235a.js",
+      "static/chunks/main-app-070b3da4559eb872.js",
+      "static/chunks/902-55999f841a718265.js",
+      "static/chunks/322-c313c6111cf0e4de.js",
+      "static/chunks/app/ingredient/[id]/page-9e6ca0c5580aeb85.js"
+    ],
+    "/page": [
+      "static/chunks/webpack-153cc7dff3cc28ec.js",
+      "static/chunks/fd9d1056-682491d09bf4394b.js",
+      "static/chunks/23-043803fa48e0235a.js",
+      "static/chunks/main-app-070b3da4559eb872.js",
+      "static/css/d8dd3831d0e16329.css",
+      "static/chunks/902-55999f841a718265.js",
+      "static/chunks/322-c313c6111cf0e4de.js",
+      "static/chunks/131-8fb0195ba5b9b416.js",
+      "static/chunks/app/page-c9a382573db5b4f8.js"
+    ],
+    "/recipe/[id]/page": [
+      "static/chunks/webpack-153cc7dff3cc28ec.js",
+      "static/chunks/fd9d1056-682491d09bf4394b.js",
+      "static/chunks/23-043803fa48e0235a.js",
+      "static/chunks/main-app-070b3da4559eb872.js",
+      "static/chunks/902-55999f841a718265.js",
+      "static/chunks/138-c2747cfad691b675.js",
+      "static/chunks/322-c313c6111cf0e4de.js",
+      "static/chunks/131-8fb0195ba5b9b416.js",
+      "static/chunks/app/recipe/[id]/page-98a569e25637edd3.js"
+    ],
+    "/recipe/add/page": [
+      "static/chunks/webpack-153cc7dff3cc28ec.js",
+      "static/chunks/fd9d1056-682491d09bf4394b.js",
+      "static/chunks/23-043803fa48e0235a.js",
+      "static/chunks/main-app-070b3da4559eb872.js",
+      "static/chunks/902-55999f841a718265.js",
+      "static/chunks/app/recipe/add/page-ec3e5ebc56bf45f7.js"
     ]
   }
 }

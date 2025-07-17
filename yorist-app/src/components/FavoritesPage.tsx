@@ -166,7 +166,7 @@ export default function FavoritesPage({
               <RecipeCard
                 key={recipe.id}
                 recipe={recipe}
-                onClick={() => onRecipeClick?.(recipe)}
+                onRecipeClick={() => onRecipeClick?.(recipe)}
                 showFavorite={true}
                 onFavoriteToggle={(id) => onFavoriteToggle?.(id, recipe.isfavorite)}
                 favorites={favorites}
