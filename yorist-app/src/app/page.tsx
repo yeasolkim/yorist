@@ -21,7 +21,7 @@ import AddIngredientForm from '@/components/AddIngredientForm';
 import ShortsRecipeAnalyzePage from '@/components/ShortsRecipeAnalyzePage';
 import { supabase } from '@/lib/supabase';
 
-export default function HomePage() {
+function HomePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -616,5 +616,15 @@ export default function HomePage() {
 
 
     </main>
+  );
+}
+
+// Suspense로 HomePage를 감싸서 export default로 내보냄
+// useSearchParams() 훅은 반드시 Suspense로 감싸야 빌드 에러가 발생하지 않음
+export default function HomePageWithSuspense() {
+  return (
+    <Suspense>
+      <HomePage />
+    </Suspense>
   );
 } 
