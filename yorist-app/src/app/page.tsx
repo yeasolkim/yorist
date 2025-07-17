@@ -504,18 +504,19 @@ function HomePage() {
         onTabChange={handleTabChange}
       />
 
-      {/* FAB(플로팅 액션 버튼) - 모든 탭에서 표시 */}
-      <div className="pointer-events-none">
-        {/* FAB 메뉴 버튼들 */}
-        <div
-          className={`fixed z-50 flex flex-col items-end transition-all duration-500 ease-out pointer-events-auto ${
-            showFabMenu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
-          }`}
-          style={{
-            right: 24,
-            bottom: 180,
-          }}
-        >
+      {/* FAB(플로팅 액션 버튼) - 홈 탭에서만 표시 */}
+      {activeTab === 'home' && (
+        <div className="pointer-events-none">
+          {/* FAB 메뉴 버튼들 */}
+          <div
+            className={`fixed z-50 flex flex-col items-end transition-all duration-500 ease-out pointer-events-auto ${
+              showFabMenu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+            }`}
+            style={{
+              right: 24,
+              bottom: 180,
+            }}
+          >
           {/* 레시피 추가 버튼 */}
           <button
             className={`group w-44 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl font-semibold text-sm text-white hover:shadow-3xl transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 fab-menu-button fab-menu-dark ${
@@ -589,6 +590,7 @@ function HomePage() {
           </button>
         </div>
       </div>
+      )}
       {/* 재료 추가 폼 모달 */}
       {showAddIngredient && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
