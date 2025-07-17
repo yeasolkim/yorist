@@ -293,7 +293,7 @@ export default function RecipeBookPage({
                 (e.target as HTMLInputElement).blur();
               }
             }}
-            placeholder="식재료 또는 요리명을 입력하세요 (엔터로 검색)"
+            placeholder="식재료 또는 요리명을 입력하세요"
             className="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-white placeholder:text-gray-500 rounded-2xl pl-12 pr-12 py-4 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none transition-all duration-200 text-base min-h-[52px]"
           />
           {searchQuery && (
