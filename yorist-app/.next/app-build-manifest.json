@@ -42,14 +42,6 @@
       "static/chunks/709-2bdbcd49aa1d2141.js",
       "static/chunks/app/recipe/[id]/page-69209a3d43573aef.js"
     ],
-    "/recipe/add/page": [
-      "static/chunks/webpack-b8c187cbe2de7114.js",
-      "static/chunks/4bd1b696-cf72ae8a39fa05aa.js",
-      "static/chunks/964-eda38e26c0391a47.js",
-      "static/chunks/main-app-34fb32f58154ab35.js",
-      "static/chunks/825-ddb311614a3e6f43.js",
-      "static/chunks/app/recipe/add/page-09d8372cf2479746.js"
-    ],
     "/page": [
       "static/chunks/webpack-b8c187cbe2de7114.js",
       "static/chunks/4bd1b696-cf72ae8a39fa05aa.js",
@@ -60,6 +52,14 @@
       "static/chunks/305-a4968a6f35428d7e.js",
       "static/chunks/709-2bdbcd49aa1d2141.js",
       "static/chunks/app/page-e04a561a45a41417.js"
+    ],
+    "/recipe/add/page": [
+      "static/chunks/webpack-b8c187cbe2de7114.js",
+      "static/chunks/4bd1b696-cf72ae8a39fa05aa.js",
+      "static/chunks/964-eda38e26c0391a47.js",
+      "static/chunks/main-app-34fb32f58154ab35.js",
+      "static/chunks/825-ddb311614a3e6f43.js",
+      "static/chunks/app/recipe/add/page-09d8372cf2479746.js"
     ],
     "/api/youtube-transcript/route": [
       "static/chunks/webpack-b8c187cbe2de7114.js",
