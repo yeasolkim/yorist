@@ -273,26 +273,26 @@ export default function RecipeDetailPage() {
     // WebSocket 연결 재시도 로직
     const setupSubscriptions = async () => {
       try {
-        // 레시피 구독
-        recipeSubscription.current = supabase
-          .channel(`recipe-${id}`)
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'recipes',
-              filter: `id=eq.${id}`
-            },
-            (payload) => {
-              console.log('레시피 데이터 변경 감지:', payload);
-              
+    // 레시피 구독
+    recipeSubscription.current = supabase
+      .channel(`recipe-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'recipes',
+          filter: `id=eq.${id}`
+        },
+        (payload) => {
+          console.log('레시피 데이터 변경 감지:', payload);
+          
               // 업데이트 중이면 스킵하여 깜빡임 방지
               if (syncManager.current.isUpdating('edit')) {
                 console.log('수정 진행 중이므로 실시간 업데이트 스킵');
-                return;
-              }
-              
+            return;
+          }
+
               // 중복 호출 방지 (2초 내 중복 호출 스킵)
               const now = Date.now();
               if (now - lastUpdateTime < 2000) {
@@ -302,7 +302,7 @@ export default function RecipeDetailPage() {
               setLastUpdateTime(now);
               
               // 더 긴 디바운스 적용하여 과도한 업데이트 방지
-              setTimeout(() => {
+          setTimeout(() => {
                 if (!syncManager.current.isUpdating('edit') && syncManager.current.canProcessExternalUpdate()) {
                   console.log('실시간 업데이트 실행');
                   fetchLatestRecipe(true);
@@ -310,8 +310,8 @@ export default function RecipeDetailPage() {
                   console.log('실시간 업데이트 스킵 - 조건 불충족');
                 }
               }, 1000);
-            }
-          )
+        }
+      )
           .subscribe((status) => {
             console.log('레시피 구독 상태:', status);
             if (status === 'CHANNEL_ERROR') {
@@ -320,30 +320,30 @@ export default function RecipeDetailPage() {
             }
           });
 
-        // 재료 마스터 구독
-        ingredientSubscription.current = supabase
-          .channel(`ingredients-master`)
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'ingredients_master'
-            },
-            (payload) => {
-              console.log('재료 마스터 데이터 변경 감지:', payload);
-              
-              // 업데이트 중이거나 디바운스 시간이 지나지 않았으면 스킵
-              if (!syncManager.current.canProcessExternalUpdate()) {
-                console.log('업데이트 진행 중이므로 재료 변경 무시');
-                return;
-              }
+    // 재료 마스터 구독
+    ingredientSubscription.current = supabase
+      .channel(`ingredients-master`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ingredients_master'
+        },
+        (payload) => {
+          console.log('재료 마스터 데이터 변경 감지:', payload);
+          
+          // 업데이트 중이거나 디바운스 시간이 지나지 않았으면 스킵
+          if (!syncManager.current.canProcessExternalUpdate()) {
+            console.log('업데이트 진행 중이므로 재료 변경 무시');
+            return;
+          }
 
               // 더 긴 디바운스로 재료 정보 업데이트
               setTimeout(() => {
                 if (recipe && syncManager.current.canProcessExternalUpdate()) {
                   console.log('재료 정보 업데이트 실행');
-                  updateRecipeIngredients();
+            updateRecipeIngredients();
                   
                   // 관련 레시피도 함께 업데이트 (재료 변경 시 항상 업데이트)
                   console.log('관련 레시피 정보 업데이트 실행');
@@ -352,8 +352,8 @@ export default function RecipeDetailPage() {
                   console.log('재료 정보 업데이트 스킵 - 조건 불충족');
                 }
               }, 500);
-            }
-          )
+        }
+      )
           .subscribe((status) => {
             console.log('재료 구독 상태:', status);
             if (status === 'CHANNEL_ERROR') {
@@ -470,7 +470,7 @@ export default function RecipeDetailPage() {
       setIsEditing(false);
       // 더 긴 지연 후 상태 해제하여 깜빡임 방지
       setTimeout(() => {
-        syncManager.current.finishUpdate('edit');
+      syncManager.current.finishUpdate('edit');
         console.log('[레시피 수정] 완료 - 동기화 상태 해제');
       }, 3000);
     }
