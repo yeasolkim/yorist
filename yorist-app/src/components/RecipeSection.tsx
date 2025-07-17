@@ -9,6 +9,7 @@ interface RecipeSectionProps {
   showFavorite?: boolean;
   favorites?: Set<string>;
   totalCount?: number; // 전체 레시피 개수 (옵션)
+  searchQuery?: string; // 검색어 추가
 }
 
 export default function RecipeSection({
@@ -18,7 +19,8 @@ export default function RecipeSection({
   onFavoriteToggle,
   showFavorite = false,
   favorites,
-  totalCount
+  totalCount,
+  searchQuery
 }: RecipeSectionProps) {
   
   return (
@@ -41,6 +43,7 @@ export default function RecipeSection({
             showFavorite={showFavorite}
             onFavoriteToggle={onFavoriteToggle}
             favorites={favorites}
+            searchQuery={searchQuery}
           />
         ))}
         {recipes.length === 0 && (

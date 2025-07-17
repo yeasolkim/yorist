@@ -56,7 +56,7 @@ export interface Recipe {
 }
 
 // 네비게이션 탭 타입
-export type NavigationTab = 'home' | 'recipebook' | 'search' | 'favorites';
+export type NavigationTab = 'home' | 'recipebook' | 'favorites';
 
 // 검색 결과 타입 정의
 export interface SearchResult {

@@ -181,28 +181,96 @@ export const recipeService = {
     }
   },
 
-  // 제목으로 레시피 검색
+  // 제목, 설명, 재료로 레시피 검색
   async searchRecipes(searchTerm: string): Promise<Recipe[]> {
     try {
-      const { data, error } = await supabase
+      const searchTermLower = searchTerm.toLowerCase();
+      
+      // 1. 제목으로 검색
+      const { data: titleResults, error: titleError } = await supabase
         .from('recipes')
         .select('*')
         .ilike('title', `%${searchTerm}%`)
-        .order('createdat', { ascending: false }) // DB 필드명과 일치
+        .order('createdat', { ascending: false });
 
-      if (error) {
-        console.error('레시피 검색 실패:', error)
-        throw error
+      if (titleError) {
+        console.error('제목 검색 실패:', titleError);
+        throw titleError;
       }
 
+      // 2. 설명으로 검색
+      const { data: descResults, error: descError } = await supabase
+        .from('recipes')
+        .select('*')
+        .ilike('description', `%${searchTerm}%`)
+        .order('createdat', { ascending: false });
+
+      if (descError) {
+        console.error('설명 검색 실패:', descError);
+        throw descError;
+      }
+
+      // 3. 재료로 검색 - 더 정확한 방법으로 개선
+      const { data: allRecipes, error: allRecipesError } = await supabase
+        .from('recipes')
+        .select('*')
+        .order('createdat', { ascending: false });
+
+      if (allRecipesError) {
+        console.error('전체 레시피 조회 실패:', allRecipesError);
+        throw allRecipesError;
+      }
+
+      // 재료 이름으로 정확히 필터링
+      const recipesWithMatchingIngredients = (allRecipes || []).filter(recipe => {
+        if (!recipe.ingredients || !Array.isArray(recipe.ingredients)) {
+          return false;
+        }
+        
+        return recipe.ingredients.some((ingredient: any) => {
+          const ingredientName = ingredient.name?.toLowerCase() || '';
+          return ingredientName.includes(searchTermLower);
+        });
+      });
+
+      // 모든 결과 합치기 (중복 제거)
+      const allResults = [
+        ...(titleResults || []),
+        ...(descResults || []),
+        ...recipesWithMatchingIngredients
+      ];
+
+      // ID 기준으로 중복 제거
+      const uniqueResults = allResults.filter((recipe, index, self) => 
+        index === self.findIndex(r => r.id === recipe.id)
+      );
+
       // 레시피 데이터를 Recipe 타입으로 변환
-      const recipes = (data || []).map(convertFromSupabaseRecipe);
+      const recipes = uniqueResults.map(convertFromSupabaseRecipe);
       
       // 각 레시피의 재료 정보를 최신으로 업데이트
       const updatedRecipes = await Promise.all(
         recipes.map(async (recipe) => {
           try {
-            return await updateRecipeWithLatestIngredients(recipe);
+            const updatedRecipe = await updateRecipeWithLatestIngredients(recipe);
+            
+            // 개발 모드에서만 매칭 정보 추가
+            if (process.env.NODE_ENV === 'development') {
+              const titleMatch = updatedRecipe.title?.toLowerCase().includes(searchTermLower) || false;
+              const descMatch = updatedRecipe.description?.toLowerCase().includes(searchTermLower) || false;
+              const ingredientMatch = updatedRecipe.ingredients?.some((ing: any) => 
+                ing.name?.toLowerCase().includes(searchTermLower)
+              ) || false;
+              
+              // 매칭 정보를 레시피 객체에 추가
+              (updatedRecipe as any).searchMatches = {
+                title: titleMatch,
+                description: descMatch,
+                ingredients: ingredientMatch
+              };
+            }
+            
+            return updatedRecipe;
           } catch (error) {
             console.error('재료 정보 업데이트 실패:', error);
             return recipe;
@@ -210,7 +278,18 @@ export const recipeService = {
         })
       );
 
-      return updatedRecipes;
+      // 검색 조건에 맞지 않는 레시피 필터링 (안전장치)
+      const finalResults = updatedRecipes.filter(recipe => {
+        const titleMatch = recipe.title?.toLowerCase().includes(searchTermLower) || false;
+        const descMatch = recipe.description?.toLowerCase().includes(searchTermLower) || false;
+        const ingredientMatch = recipe.ingredients?.some((ing: any) => 
+          ing.name?.toLowerCase().includes(searchTermLower)
+        ) || false;
+        
+        return titleMatch || descMatch || ingredientMatch;
+      });
+
+      return finalResults;
     } catch (error) {
       console.error('레시피 검색 중 오류 발생:', error)
       return []

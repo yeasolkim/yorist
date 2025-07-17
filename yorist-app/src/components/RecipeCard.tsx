@@ -8,24 +8,66 @@ interface RecipeCardProps {
   showFavorite?: boolean;
   onFavoriteToggle?: (recipeId: string, currentFavorite: boolean) => void; // 시그니처 수정
   favorites?: Set<string>;
+  searchQuery?: string; // 검색어 추가
 }
+
+// 텍스트에서 검색어를 강조하는 함수
+const highlightSearchTerm = (text: string, searchTerm: string) => {
+  if (!searchTerm || !text) return text;
+  
+  const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const parts = text.split(regex);
+  
+  return parts.map((part, index) => 
+    regex.test(part) ? (
+      <span key={index} className="bg-orange-500/20 text-orange-300 underline decoration-orange-400 decoration-2">
+        {part}
+      </span>
+    ) : part
+  );
+};
 
 export default function RecipeCard({ 
   recipe, 
   onRecipeClick, 
   showFavorite = false, 
   onFavoriteToggle,
-  favorites
+  favorites,
+  searchQuery
 }: RecipeCardProps) {
   // const emojiMap = getIngredientEmojiMap(); // 삭제
   
-  // 재료 표시용: 최대 3개만 추출
-  const displayIngredients = recipe.ingredients.slice(0, 3);
+  // 검색어가 있을 때는 매칭되는 재료만 표시, 없으면 최대 3개
+  const getDisplayIngredients = () => {
+    if (!searchQuery || searchQuery.trim() === '') {
+      return recipe.ingredients.slice(0, 3);
+    }
+    
+    const searchTermLower = searchQuery.toLowerCase();
+    const matchingIngredients = recipe.ingredients.filter(ingredient => 
+      ingredient.name?.toLowerCase().includes(searchTermLower)
+    );
+    
+    // 매칭되는 재료가 있으면 그것만 표시, 없으면 전체 재료 중 3개
+    return matchingIngredients.length > 0 
+      ? matchingIngredients.slice(0, 3) 
+      : recipe.ingredients.slice(0, 3);
+  };
+  
+  const displayIngredients = getDisplayIngredients();
 
   const isFavorite = favorites?.has(recipe.id);
 
   // 썸네일 URL 생성
   const thumbnailUrl = getYoutubeThumbnailUrl(recipe.videourl || '');
+
+  // 검색어가 있을 때 매칭 여부 확인
+  const isSearchMode = searchQuery && searchQuery.trim() !== '';
+  const titleMatch = isSearchMode && recipe.title?.toLowerCase().includes(searchQuery.toLowerCase());
+  const descMatch = isSearchMode && recipe.description?.toLowerCase().includes(searchQuery.toLowerCase());
+  const hasMatchingIngredients = isSearchMode && recipe.ingredients?.some((ing: any) => 
+    ing.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div 
@@ -59,11 +101,19 @@ export default function RecipeCard({
           }
         })()}
         <div className="flex-1 min-w-0 pr-2">
+          {/* 제목 - 검색어가 있으면 강조 표시 */}
           <h3 className="text-white text-sm sm:text-base font-bold mb-1 line-clamp-1 leading-tight">
-            {recipe.title}
+            {isSearchMode && titleMatch 
+              ? highlightSearchTerm(recipe.title, searchQuery)
+              : recipe.title
+            }
           </h3>
+          {/* 설명 - 검색어가 있으면 강조 표시 */}
           <p className="text-gray-400 text-xs sm:text-sm line-clamp-1 leading-relaxed">
-            {recipe.description}
+            {isSearchMode && descMatch 
+              ? highlightSearchTerm(recipe.description, searchQuery)
+              : recipe.description
+            }
           </p>
         </div>
         {/* 즐겨찾기 버튼 */}
@@ -96,17 +146,33 @@ export default function RecipeCard({
           </button>
         )}
       </div>
+      
       {/* 재료 목록 */}
       <div className="mb-1">
         <div className="flex flex-wrap gap-1">
-          {displayIngredients.map((ingredient, index) => (
-            <span 
-              key={index} 
-              className="inline-flex items-center gap-1 bg-[#2a2a2a] text-white text-[10px] sm:text-xs px-2 py-1 rounded-full border border-[#3a3a3a] hover:border-[#4a4a4a] transition-colors duration-200"
-            >
-              <span className="font-medium">{ingredient.name}</span>
-            </span>
-          ))}
+          {displayIngredients.map((ingredient, index) => {
+            const isMatching = searchQuery && ingredient.name?.toLowerCase().includes(searchQuery.toLowerCase());
+            return (
+              <span 
+                key={`${recipe.id}-ingredient-${ingredient.name}-${index}`} 
+                className={`inline-flex items-center gap-1 text-[10px] sm:text-xs px-2 py-1 rounded-full border transition-colors duration-200 ${
+                  isMatching 
+                    ? 'bg-orange-500/20 text-orange-300 border-orange-500/30 hover:border-orange-500/50' 
+                    : 'bg-[#2a2a2a] text-white border-[#3a3a3a] hover:border-[#4a4a4a]'
+                }`}
+              >
+                <span className="font-medium">
+                  {isSearchMode && isMatching 
+                    ? highlightSearchTerm(ingredient.name, searchQuery)
+                    : ingredient.name
+                  }
+                </span>
+                {isMatching && (
+                  <span className="text-orange-400 text-xs">✓</span>
+                )}
+              </span>
+            );
+          })}
           {recipe.ingredients.length > 3 && (
             <span className="text-gray-500 text-[10px] sm:text-xs px-2 py-1 bg-[#2a2a2a] rounded-full border border-[#3a3a3a]">
               +{recipe.ingredients.length - 3}개 더

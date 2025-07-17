@@ -3,29 +3,24 @@
     "/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/css/app/page.css",
+      "static/css/css-src_components_CookingLoader_css.css",
       "static/chunks/app/page.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/css/app/layout.css",
+      "static/css/css-src_app_globals_css.css",
       "static/chunks/app/layout.js"
-    ],
-    "/recipe/[id]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/recipe/[id]/page.js"
     ],
     "/ingredient/[id]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/ingredient/[id]/page.js"
     ],
-    "/not-found": [
+    "/recipe/[id]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/not-found.js"
+      "static/chunks/app/recipe/[id]/page.js"
     ]
   }
 }

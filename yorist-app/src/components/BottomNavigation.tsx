@@ -10,7 +10,7 @@ export default function BottomNavigation({
   activeTab,
   onTabChange,
 }: BottomNavigationProps) {
-  // 네비게이션 탭 설정 (id와 label을 UI와 일치시킴)
+  // 네비게이션 탭 설정 (검색 탭 제거)
   const tabs = [
     {
       id: 'home' as NavigationTab,
@@ -27,15 +27,6 @@ export default function BottomNavigation({
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5V6.5A2.5 2.5 0 016.5 4H20v13M4 19.5V21a1 1 0 001 1h13.5a2.5 2.5 0 002.5-2.5V6.5" />
-        </svg>
-      )
-    },
-    {
-      id: 'search' as NavigationTab,
-      label: '검색',
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
       )
     },
