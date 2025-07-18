@@ -1,7 +1,7 @@
 export default function YoristHeader() {
   return (
     // 헤더 배경을 완전 투명하게 변경
-    <header className="w-full bg-transparent py-4 sm:py-6 mb-4 sm:mb-6 rounded-b-2xl sm:rounded-b-3xl shadow-sm flex flex-col items-center">
+    <header className="w-full bg-transparent py-2 sm:py-4 mb-2 sm:mb-3 rounded-b-2xl sm:rounded-b-3xl shadow-sm flex flex-col items-center">
       <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white flex items-center mb-1 sm:mb-2">
         Yorist
         <span className="ml-2 text-orange-400 text-base sm:text-lg align-super font-semibold">•</span>

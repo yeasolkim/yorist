@@ -550,7 +550,7 @@ export default function RecipeDetailPage() {
 
   return (
     <main className="h-screen max-w-md mx-auto flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-4 pb-24 pt-6">
+      <div className="flex-1 overflow-y-auto px-4 pb-24 pt-2 sm:pt-4">
       <YoristHeader />
       {editMode ? (
         <ManualRecipeForm

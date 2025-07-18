@@ -269,7 +269,7 @@ export default function RecipeBookPage({
   };
 
   return (
-    <div className="px-4 pt-6 pb-24">
+    <div className="px-4 pt-2 sm:pt-4 pb-24">
       {/* 검색 입력창 */}
       <div className="relative mb-6">
         <div className="relative">
