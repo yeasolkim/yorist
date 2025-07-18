@@ -141,9 +141,7 @@ export default function FavoritesPage({
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white">즐겨찾기</h1>
         </div>
-        <p className="text-gray-400 text-sm ml-11">나만의 소중한 레시피와 재료 모음</p>
       </div>
 
       {/* 즐겨찾기 레시피 섹션 */}
@@ -226,17 +224,12 @@ export default function FavoritesPage({
           <div className="grid grid-cols-2 gap-3">
             {favoriteIngredients.map(item => (
               <div key={item.id} className="block" onClick={() => window.location.href = `/ingredient/${item.id}` } tabIndex={0} role="button">
-                <div className="bg-[#1a1a1a] rounded-2xl p-4 hover:bg-[#232323] hover:border hover:border-green-400 transition-all duration-200 cursor-pointer border border-[#2a2a2a] group">
-                  <div className="flex items-center justify-between">
-                    {/* 재료명과 아이콘 */}
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div className="w-8 h-8 bg-gradient-to-r from-green-400/20 to-green-500/20 rounded-lg flex items-center justify-center group-hover:from-green-400/30 group-hover:to-green-500/30 transition-colors">
-                        <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
-                      </div>
-                      <span className="text-white font-medium text-sm truncate">{item.name}</span>
-                    </div>
+                                 <div className="bg-[#1a1a1a] rounded-2xl p-4 hover:bg-[#232323] hover:border hover:border-green-400 transition-all duration-200 cursor-pointer border border-[#2a2a2a] group">
+                   <div className="flex items-center justify-between">
+                     {/* 재료명 */}
+                     <div className="flex-1 min-w-0">
+                       <span className="text-white font-medium text-xs truncate block">{item.name}</span>
+                     </div>
                     
                     {/* 액션 버튼들 */}
                     <div className="flex items-center gap-2 ml-2">
