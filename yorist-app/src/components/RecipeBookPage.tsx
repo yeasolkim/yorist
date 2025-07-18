@@ -24,7 +24,6 @@ export default function RecipeBookPage({
   // 검색 관련 상태
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredRecipes, setFilteredRecipes] = useState<Recipe[]>([]);
-  const [keywordSuggestions, setKeywordSuggestions] = useState<string[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [ingredientResults, setIngredientResults] = useState<any[]>([]);
   const [ingredientFavoriteTogglingIds, setIngredientFavoriteTogglingIds] = useState<Set<string>>(new Set());
@@ -109,7 +108,6 @@ export default function RecipeBookPage({
   useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredRecipes([]);
-      setKeywordSuggestions([]);
       setIngredientResults([]);
       setSearchLoading(false);
       return;
@@ -130,17 +128,7 @@ export default function RecipeBookPage({
         );
         setFilteredRecipes(uniqueRecipeResults as Recipe[]);
         
-        // 추천 키워드 추출
-        const query = searchQuery.toLowerCase();
-        const keywords = new Set<string>();
-        uniqueRecipeResults.forEach(recipe => {
-          if (recipe.title?.toLowerCase().includes(query)) keywords.add(recipe.title);
-          if (recipe.description?.toLowerCase().includes(query)) keywords.add(recipe.description);
-          recipe.ingredients?.forEach(ing => {
-            if (ing.name?.toLowerCase().includes(query)) keywords.add(ing.name);
-          });
-        });
-        setKeywordSuggestions(Array.from(keywords).slice(0, 8));
+
         
         // 재료 검색
         const searchTerm = searchQuery.trim();
@@ -210,7 +198,6 @@ export default function RecipeBookPage({
       } catch (error) {
         console.error('검색 실패:', error);
         setFilteredRecipes([]);
-        setKeywordSuggestions([]);
         setIngredientResults([]);
       } finally {
         // 검색 완료 후 로딩 상태 해제
@@ -329,25 +316,7 @@ export default function RecipeBookPage({
           ) : (
             /* 검색 완료 후: 실제 결과 표시 */
             <>
-              {/* 실시간 추천 키워드 */}
-              {keywordSuggestions.length > 0 && (
-                <div className="mb-8">
-                  <h3 className="text-white font-semibold mb-3">추천 키워드</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {keywordSuggestions.map((keyword, index) => (
-                      <button
-                        key={`keyword-${keyword}-${index}`}
-                        className="px-4 py-2 rounded-full bg-[#2a2a2a] text-orange-400 text-sm font-medium hover:bg-[#3a3a3a] hover:text-orange-300 transition-all duration-200 border border-[#3a3a3a] hover:border-orange-400/30 min-h-[44px]"
-                        onClick={() => handleSearch(keyword)}
-                      >
-                        {keyword.length > 10
-                          ? keyword.substring(0, 10) + '...'
-                          : keyword}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+
 
               {/* 식재료 검색 결과 섹션 */}
               {ingredientResults.length > 0 && (
