@@ -24,20 +24,18 @@ interface ManualRecipeFormProps {
 
 
 export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: ManualRecipeFormProps) {
-  const [title, setTitle] = useState(initialRecipe?.title || '');
-  const [description, setDescription] = useState(initialRecipe?.description || '');
-  const [ingredients, setIngredients] = useState<RecipeIngredient[]>(initialRecipe?.ingredients || []);
-  const [steps, setSteps] = useState<RecipeStep[]>(initialRecipe?.steps || []);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [ingredients, setIngredients] = useState<RecipeIngredient[]>([]);
+  const [steps, setSteps] = useState<RecipeStep[]>([]);
   
-  // 초기 레시피 데이터에서 재료의 ingredient_id 확인 및 설정
+  // 초기 레시피 데이터 설정 - initialRecipe가 변경될 때마다 상태 업데이트
   useEffect(() => {
-    if (initialRecipe?.ingredients && initialRecipe.ingredients.length > 0) {
-      console.log('[ManualRecipeForm] 초기 재료 데이터 확인:', initialRecipe.ingredients);
-      // 이미 ingredient_id가 설정되어 있는지 확인
-      const hasValidIds = initialRecipe.ingredients.every(ing => ing.ingredient_id);
-      if (!hasValidIds) {
-        console.log('[ManualRecipeForm] 일부 재료에 ingredient_id가 없음, 매칭 시도');
-      }
+    if (initialRecipe) {
+      setTitle(initialRecipe.title || '');
+      setDescription(initialRecipe.description || '');
+      setIngredients(initialRecipe.ingredients || []);
+      setSteps(initialRecipe.steps || []);
     }
   }, [initialRecipe]);
   
@@ -176,44 +174,39 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
   const handleSaveEditIngredient = async (idx: number) => {
     try {
       const originalIngredient = ingredients[idx];
-      console.log('[재료 수정] 원본 재료:', originalIngredient);
-      console.log('[재료 수정] 수정된 값:', {
-        name: editIngredientName,
-        amount: editIngredientAmount,
-        unit: editIngredientUnit,
-        shop_url: editIngredientShopUrl
-      });
       
       const updatedIngredient = {
         ...originalIngredient,
-        name: editIngredientName,
-        amount: editIngredientAmount,
-        unit: editIngredientUnit,
-        shop_url: editIngredientShopUrl
+        name: editIngredientName.trim(),
+        amount: editIngredientAmount.trim(),
+        unit: editIngredientUnit.trim(),
+        shop_url: editIngredientShopUrl.trim() || undefined
       };
-      
-      console.log('[재료 수정] 최종 업데이트된 재료:', updatedIngredient);
       
       // ingredients_master 테이블 업데이트
       if (originalIngredient.ingredient_id) {
         await updateIngredient(originalIngredient.ingredient_id, {
-            name: editIngredientName,
-            unit: editIngredientUnit,
-          shop_url: editIngredientShopUrl || undefined
+          name: editIngredientName.trim(),
+          unit: editIngredientUnit.trim(),
+          shop_url: editIngredientShopUrl.trim() || undefined
         });
       }
       
+      // 로컬 상태 업데이트
       setIngredients(prev => {
         const newIngredients = prev.map((ing, i) =>
-        i === idx ? updatedIngredient : ing
+          i === idx ? updatedIngredient : ing
         );
-        console.log('[재료 수정] 업데이트된 재료 목록:', newIngredients);
         return newIngredients;
       });
+      
       setEditingIngredientIdx(null);
-      setEditIngredientName(''); setEditIngredientAmount(''); setEditIngredientUnit(''); setEditIngredientShopUrl('');
+      setEditIngredientName('');
+      setEditIngredientAmount('');
+      setEditIngredientUnit('');
+      setEditIngredientShopUrl('');
     } catch (error) {
-      console.error('재료 수정 중 오류:', error);
+      console.error('[ManualRecipeForm] 재료 수정 중 오류:', error);
       alert('재료 수정 중 오류가 발생했습니다. 다시 시도해주세요.');
     }
   };
@@ -233,9 +226,12 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
   };
   // 단계 수정 저장
   const handleSaveEditStep = (idx: number) => {
-    setSteps(prev => prev.map((step, i) =>
-      i === idx ? { ...step, description: editStepDescription } : step
-    ));
+    setSteps(prev => {
+      const newSteps = prev.map((step, i) =>
+        i === idx ? { ...step, description: editStepDescription.trim() } : step
+      );
+      return newSteps;
+    });
     setEditingStepIdx(null);
     setEditStepDescription('');
   };
@@ -247,25 +243,44 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
 
   // 조리 단계 텍스트 변경 핸들러
   const handleStepChange = (idx: number, value: string) => {
-    setSteps(prev => prev.map((step, i) => i === idx ? { ...step, description: value } : step));
+    setSteps(prev => {
+      const newSteps = prev.map((step, i) => i === idx ? { ...step, description: value } : step);
+      return newSteps;
+    });
   };
 
   // 폼 제출 (DB 저장은 상위에서만)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) { alert('레시피 제목을 입력해주세요.'); return; }
-    if (ingredients.length === 0) { alert('재료를 하나 이상 추가해주세요.'); return; }
-    if (steps.length === 0) { alert('조리 단계를 하나 이상 추가해주세요.'); return; }
+    
+    // 유효성 검사
+    if (!title.trim()) { 
+      alert('레시피 제목을 입력해주세요.'); 
+      return; 
+    }
+    if (ingredients.length === 0) { 
+      alert('재료를 하나 이상 추가해주세요.'); 
+      return; 
+    }
+    if (steps.length === 0) { 
+      alert('조리 단계를 하나 이상 추가해주세요.'); 
+      return; 
+    }
 
-    // 1. 수정(UPDATE) 모드: id가 있으면 insert를 절대 실행하지 않음
+    // 1. 수정(UPDATE) 모드: id가 있으면 update 실행
     if (initialRecipe?.id) {
       const recipe: Recipe = {
         id: initialRecipe.id,
         title: title.trim(),
         description: description.trim(),
-        // ingredient_id를 무조건 문자열로 변환
-        ingredients: ingredients.map(ing => ({ ...ing, ingredient_id: String(ing.ingredient_id) })),
-        steps: steps.map(s => ({ description: s.description, isImportant: s.isImportant })),
+        ingredients: ingredients.map(ing => ({ 
+          ...ing, 
+          ingredient_id: String(ing.ingredient_id || '') 
+        })),
+        steps: steps.map(s => ({ 
+          description: s.description, 
+          isImportant: s.isImportant || false 
+        })),
         videourl: videourl.trim() || undefined,
         channel: channel.trim() || undefined,
         tags: initialRecipe?.tags || [],
@@ -273,18 +288,27 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
         createdat: initialRecipe?.createdat || new Date(),
         isfavorite: initialRecipe?.isfavorite || false
       };
+      
       onSave(recipe);
-      return; // 반드시 return으로 아래 insert 코드 실행 방지!
+      return;
     }
 
     // 2. 추가(INSERT) 모드: id가 없을 때만 insert 실행
-    // DB 저장은 상위에서만 하므로 여기서는 onSave만 호출
+    // 사용자가 수정한 현재 폼 상태를 그대로 사용하여 레시피 생성
     const recipe: Recipe = {
       id: '',
       title: title.trim(),
       description: description.trim(),
-      ingredients,
-      steps: steps.map(s => ({ description: s.description, isImportant: s.isImportant })),
+      // 현재 폼의 재료 상태 사용 (사용자가 수정한 내용 반영)
+      ingredients: ingredients.map(ing => ({ 
+        ...ing, 
+        ingredient_id: String(ing.ingredient_id || '') 
+      })),
+      // 현재 폼의 단계 상태 사용 (사용자가 수정한 내용 반영)
+      steps: steps.map(s => ({ 
+        description: s.description, 
+        isImportant: s.isImportant || false 
+      })),
       videourl: videourl.trim() || undefined,
       channel: channel.trim() || undefined,
       tags: initialRecipe?.tags || [],
@@ -292,6 +316,7 @@ export default function ManualRecipeForm({ onSave, onCancel, initialRecipe }: Ma
       createdat: new Date(),
       isfavorite: false
     };
+    
     onSave(recipe);
   };
 

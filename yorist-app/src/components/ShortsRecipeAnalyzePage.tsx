@@ -31,7 +31,7 @@ const ShortsRecipeAnalyzePage: React.FC<ShortsRecipeAnalyzePageProps> = ({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ youtubeUrl })
+        body: JSON.stringify({ youtubeUrl, isShorts: true })
       });
 
       const data = await response.json();

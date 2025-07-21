@@ -45,6 +45,8 @@ function HomePage() {
   // FAB(플로팅 액션 버튼) 메뉴 상태
   const [showFabMenu, setShowFabMenu] = useState(false);
   const [isFavoriteToggling, setIsFavoriteToggling] = useState<Set<string>>(new Set());
+  
+
 
   // 레시피 데이터를 최신으로 fetch하는 함수
   const fetchLatestRecipes = useCallback(async () => {
@@ -614,6 +616,8 @@ function HomePage() {
           </div>
         </div>
       )}
+
+
 
 
 
